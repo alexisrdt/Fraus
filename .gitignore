@@ -1,0 +1,7 @@
+# Ignore all
+*
+
+# Except Fraus
+!.gitignore
+!README.md
+!fraus
