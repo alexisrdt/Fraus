@@ -20,5 +20,6 @@ FR_DECLARE_PFN(vkCreateInstance)
 
 FR_DECLARE_PFN(vkDestroyInstance) // TODO: array for multiple instances?
 FR_DECLARE_PFN(vkEnumeratePhysicalDevices)
+FR_DECLARE_PFN(vkCreateDevice)
 
 #endif

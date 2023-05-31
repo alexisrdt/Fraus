@@ -22,6 +22,7 @@ FrResult frCreateInstance(const char* pName, uint32_t version, VkInstance* pInst
 
 	FR_LOAD_INSTANCE_PFN(*pInstance, vkDestroyInstance)
 	FR_LOAD_INSTANCE_PFN(*pInstance, vkEnumeratePhysicalDevices)
+	FR_LOAD_INSTANCE_PFN(*pInstance, vkCreateDevice)
 
 	return FR_SUCCESS;
 }
