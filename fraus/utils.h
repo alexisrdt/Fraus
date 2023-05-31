@@ -1,0 +1,13 @@
+#ifndef FRAUS_UTILS_H
+#define FRAUS_UTILS_H
+
+typedef enum FrResult
+{
+	FR_SUCCESS,
+	FR_ERROR_FILE_NOT_FOUND,
+	FR_ERROR_OUT_OF_MEMORY,
+	FR_ERROR_INVALID_ARGUMENT,
+	FR_ERROR_UNKNOWN
+} FrResult;
+
+#endif
