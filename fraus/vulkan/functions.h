@@ -19,5 +19,6 @@ FR_DECLARE_PFN(vkGetInstanceProcAddr)
 FR_DECLARE_PFN(vkCreateInstance)
 
 FR_DECLARE_PFN(vkDestroyInstance) // TODO: array for multiple instances?
+FR_DECLARE_PFN(vkEnumeratePhysicalDevices)
 
 #endif

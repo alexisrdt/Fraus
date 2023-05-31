@@ -21,6 +21,7 @@ FrResult frCreateInstance(const char* pName, uint32_t version, VkInstance* pInst
 	if(vkCreateInstance(&create_info, NULL, pInstance) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	FR_LOAD_INSTANCE_PFN(*pInstance, vkDestroyInstance)
+	FR_LOAD_INSTANCE_PFN(*pInstance, vkEnumeratePhysicalDevices)
 
 	return FR_SUCCESS;
 }
