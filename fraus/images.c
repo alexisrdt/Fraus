@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // MSBF = Most Significant Byte First
 #define FR_MSBF_TO_U32(bytes) \
@@ -88,11 +89,11 @@ static uint32_t frCRC(const uint8_t* data, uint32_t size)
 	return ~CRC;
 }
 
-FrResult frLoadPng(const char* path, FrImage* pImage)
+FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 {
-	if(!path || !pImage) return FR_ERROR_INVALID_ARGUMENT;
+	if(!pPath || !pImage) return FR_ERROR_INVALID_ARGUMENT;
 
-	FILE* file = fopen(path, "rb");
+	FILE* file = fopen(pPath, "rb");
 	if(!file) return errno == ENOENT ? FR_ERROR_FILE_NOT_FOUND : FR_ERROR_UNKNOWN;
 
 	uint8_t signature[8];
@@ -116,19 +117,26 @@ FrResult frLoadPng(const char* path, FrImage* pImage)
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
+	bool first = true;
+	bool palette = false;
+	uint8_t bit_depth;
+	uint8_t* data = NULL;
+	size_t data_size = 0;
+
 	while(true)
 	{
 		uint8_t length_buffer[4];
 		if(fread(length_buffer, 1, 4, file) != 4)
 		{
-			if(getc(file) == EOF) break;
-
+			free(data);
 			fclose(file);
+			if(getc(file) == EOF) return FR_ERROR_CORRUPTED_FILE;
 			return FR_ERROR_UNKNOWN;
 		}
 		uint32_t length = FR_MSBF_TO_U32(length_buffer);
 		if(length >= (1 << 31))
 		{
+			free(data);
 			fclose(file);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
@@ -136,6 +144,7 @@ FrResult frLoadPng(const char* path, FrImage* pImage)
 		uint8_t* type_and_data = (uint8_t*)malloc(length + 4);
 		if(!type_and_data || fread(type_and_data, 1, length + 4, file) != length + 4)
 		{
+			free(data);
 			fclose(file);
 			return FR_ERROR_UNKNOWN;
 		}
@@ -143,6 +152,7 @@ FrResult frLoadPng(const char* path, FrImage* pImage)
 		uint8_t CRC_buffer[4];
 		if(fread(CRC_buffer, 1, 4, file) != 4)
 		{
+			free(data);
 			fclose(file);
 			return FR_ERROR_UNKNOWN;
 		}
@@ -150,13 +160,110 @@ FrResult frLoadPng(const char* path, FrImage* pImage)
 
 		if(frCRC(type_and_data, length + 4) != CRC)
 		{
+			free(data);
 			fclose(file);
 			return FR_ERROR_CORRUPTED_FILE;
+		}
+
+		if(
+			type_and_data[0] == 'I' &&
+			type_and_data[1] == 'H' &&
+			type_and_data[2] == 'D' &&
+			type_and_data[3] == 'R'
+		)
+		{
+			if(length != 13 || !first)
+			{
+				free(data);
+				fclose(file);
+				return FR_ERROR_CORRUPTED_FILE;
+			}
+
+			pImage->width = FR_MSBF_TO_U32(type_and_data + 4);
+			pImage->height = FR_MSBF_TO_U32(type_and_data + 8);
+			bit_depth = type_and_data[12];
+			switch(type_and_data[13])
+			{
+				case 0:
+					pImage->type = FR_GRAY;
+					break;
+
+				case 2:
+					pImage->type = FR_RGB;
+					break;
+
+				case 3:
+					palette = true;
+					pImage->type = FR_RGB;
+					break;
+
+				case 4:
+					pImage->type = FR_GRAY_ALPHA;
+					break;
+
+				case 6:
+					pImage->type = FR_RGB_ALPHA;
+					break;
+
+				default:
+					fclose(file);
+					return FR_ERROR_CORRUPTED_FILE;
+			}
+
+			first = false;
+
+			continue;
+		}
+
+		if(first)
+		{
+			free(data);
+			fclose(file);
+			return FR_ERROR_CORRUPTED_FILE;
+		}
+
+		if(
+			type_and_data[0] == 'I' &&
+			type_and_data[1] == 'D' &&
+			type_and_data[2] == 'A' &&
+			type_and_data[3] == 'T'
+		)
+		{
+			uint8_t* new_data = (uint8_t*)realloc(data, data_size + length);
+			if(!new_data)
+			{
+				free(data);
+				fclose(file);
+				return FR_ERROR_UNKNOWN;
+			}
+			data = new_data;
+
+			memcpy(data + data_size, type_and_data + 4, length);
+
+			data_size += length;
+		}
+
+		if(
+			type_and_data[0] == 'I' &&
+			type_and_data[1] == 'E' &&
+			type_and_data[2] == 'N' &&
+			type_and_data[3] == 'D'
+		)
+		{
+			if(length != 0 || getc(file) != EOF)
+			{
+				free(data);
+				fclose(file);
+				return FR_ERROR_CORRUPTED_FILE;
+			}
+
+			break;
 		}
 
 		free(type_and_data);
 	}
 
+	free(data);
 	fclose(file);
 
 	return FR_SUCCESS;

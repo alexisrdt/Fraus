@@ -7,8 +7,10 @@
 
 typedef enum FrImageType
 {
+	FR_GRAY,
+	FR_GRAY_ALPHA,
 	FR_RGB,
-	FR_RGBA
+	FR_RGB_ALPHA
 } FrImageType;
 
 typedef struct FrImage
@@ -19,6 +21,6 @@ typedef struct FrImage
 	FrImageType type;
 } FrImage;
 
-FrResult frLoadPng(const char* path, FrImage* pImage);
+FrResult frLoadPNG(const char* pPath, FrImage* pImage);
 
 #endif
