@@ -6,9 +6,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-// MSBF = Most Significant Byte First
+// MSBF =  Most Significant Byte First
+// LSBF = Least Significant Byte First
+
+#define FR_MSBF_TO_U16(bytes) \
+(((bytes)[0] << 8) | (bytes)[1])
+
 #define FR_MSBF_TO_U32(bytes) \
 (((bytes)[0] << 24) | ((bytes)[1] << 16) | ((bytes)[2] << 8) | (bytes)[3])
+
+#define FR_LSBF_TO_U16(bytes) \
+((bytes)[0] | ((bytes)[1] << 8))
+
+#define FR_REVERSE_BYTE(byte) \
+(((byte & 1) << 7) | ((byte & 2) << 5) | ((byte & 4) << 3) | ((byte & 8) << 1) | ((byte & 16) >> 1) | ((byte & 32) >> 3) | ((byte & 64) >> 5) | ((byte & 128) >> 7))
 
 static const uint32_t CRC_table[256] = {
 	0x00000000, 0x77073096,	0xEE0E612C,	0x990951BA,
@@ -57,24 +68,24 @@ static const uint32_t CRC_table[256] = {
 	0xDF60EFC3,	0xA867DF55,	0x316E8EEF,	0x4669BE79,
 	0xCB61B38C,	0xBC66831A,	0x256FD2A0,	0x5268E236,
 	0xCC0C7795,	0xBB0B4703,	0x220216B9,	0x5505262F,
-	0xC5BA3BBE,	0xB2BD0B28,	0x2BB45A92,	0x5CB36A04,
-	0xC2D7FFA7,	0xB5D0CF31,	0x2CD99E8B,	0x5BDEAE1D,
-	0x9B64C2B0,	0xEC63F226,	0x756AA39C,	0x026D930A,
-	0x9C0906A9,	0xEB0E363F,	0x72076785,	0x05005713,
-	0x95BF4A82,	0xE2B87A14,	0x7BB12BAE,	0x0CB61B38,
-	0x92D28E9B,	0xE5D5BE0D,	0x7CDCEFB7,	0x0BDBDF21,
-	0x86D3D2D4,	0xF1D4E242,	0x68DDB3F8,	0x1FDA836E,
-	0x81BE16CD,	0xF6B9265B,	0x6FB077E1,	0x18B74777,
-	0x88085AE6,	0xFF0F6A70,	0x66063BCA,	0x11010B5C,
-	0x8F659EFF,	0xF862AE69,	0x616BFFD3,	0x166CCF45,
-	0xA00AE278,	0xD70DD2EE,	0x4E048354,	0x3903B3C2,
-	0xA7672661,	0xD06016F7,	0x4969474D,	0x3E6E77DB,
-	0xAED16A4A,	0xD9D65ADC,	0x40DF0B66,	0x37D83BF0,
-	0xA9BCAE53,	0xDEBB9EC5,	0x47B2CF7F,	0x30B5FFE9,
-	0xBDBDF21C,	0xCABAC28A,	0x53B39330,	0x24B4A3A6,
-	0xBAD03605,	0xCDD70693,	0x54DE5729,	0x23D967BF,
-	0xB3667A2E,	0xC4614AB8,	0x5D681B02,	0x2A6F2B94,
-	0xB40BBE37,	0xC30C8EA1,	0x5A05DF1B,	0x2D02EF8D
+	0xC5BA3BBE, 0xB2BD0B28, 0x2BB45A92, 0x5CB36A04,
+	0xC2D7FFA7, 0xB5D0CF31, 0x2CD99E8B, 0x5BDEAE1D,
+	0x9B64C2B0, 0xEC63F226, 0x756AA39C, 0x026D930A,
+	0x9C0906A9, 0xEB0E363F, 0x72076785, 0x05005713,
+	0x95BF4A82, 0xE2B87A14, 0x7BB12BAE, 0x0CB61B38,
+	0x92D28E9B, 0xE5D5BE0D, 0x7CDCEFB7, 0x0BDBDF21,
+	0x86D3D2D4, 0xF1D4E242, 0x68DDB3F8, 0x1FDA836E,
+	0x81BE16CD, 0xF6B9265B, 0x6FB077E1, 0x18B74777,
+	0x88085AE6, 0xFF0F6A70, 0x66063BCA, 0x11010B5C,
+	0x8F659EFF, 0xF862AE69, 0x616BFFD3, 0x166CCF45,
+	0xA00AE278, 0xD70DD2EE, 0x4E048354, 0x3903B3C2,
+	0xA7672661, 0xD06016F7, 0x4969474D, 0x3E6E77DB,
+	0xAED16A4A, 0xD9D65ADC, 0x40DF0B66, 0x37D83BF0,
+	0xA9BCAE53, 0xDEBB9EC5, 0x47B2CF7F, 0x30B5FFE9,
+	0xBDBDF21C, 0xCABAC28A, 0x53B39330, 0x24B4A3A6,
+	0xBAD03605, 0xCDD70693, 0x54DE5729, 0x23D967BF,
+	0xB3667A2E, 0xC4614AB8, 0x5D681B02, 0x2A6F2B94,
+	0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D
 };
 
 static uint32_t frCRC(const uint8_t* data, uint32_t size)
@@ -89,13 +100,156 @@ static uint32_t frCRC(const uint8_t* data, uint32_t size)
 	return ~CRC;
 }
 
+typedef struct FrDeflateIterator
+{
+	const uint8_t* data;
+	size_t size;
+	uint8_t iterator;
+} FrDeflateIterator;
+
+static FrResult frGetNextBit(FrDeflateIterator* pIterator, uint8_t* pBit)
+{
+	if(!pIterator || !pBit) return FR_ERROR_INVALID_ARGUMENT;
+
+	uint8_t diff = pIterator->iterator / 8;
+	if(diff >= pIterator->size) return FR_ERROR_CORRUPTED_FILE;
+
+	pIterator->size -= diff;
+	pIterator->data += diff;
+	pIterator->iterator -= 8 * diff;
+
+	*pBit = (*pIterator->data & (1 << pIterator->iterator)) >> pIterator->iterator;
+	++pIterator->iterator;
+
+	return FR_SUCCESS;
+}
+
+typedef struct FrHuffmanNode
+{
+	struct FrHuffmanNode* zero;
+	struct FrHuffmanNode* one;
+	int16_t symbol;
+} FrHuffmanNode;
+
+static FrResult frBuildHuffmanTree(FrDeflateIterator* pIterator, FrHuffmanNode* pRoot, uint8_t* pLengths, size_t lengthCount)
+{
+	if(!pIterator || !pRoot || !pLengths || !lengthCount) return FR_ERROR_INVALID_ARGUMENT;
+
+	pRoot->symbol = -1;
+	pRoot->zero = NULL;
+	pRoot->one = NULL;
+
+	uint8_t codeCounts[8] = {0};
+	for(size_t i = 0; i < lengthCount; ++i) ++codeCounts[pLengths[i] - 1];
+
+	uint16_t total = 0;
+	for(size_t i = 1; i <= 8; ++i)
+	{
+		total = total * 2 + codeCounts[i - 1];
+		if(total > (1 << i)) return FR_ERROR_CORRUPTED_FILE;
+	}
+
+	uint16_t lastCode = 0;
+	for(uint8_t i = 0; i < 8; ++i)
+	{
+		if(codeCounts[i] == 0) continue;
+
+		uint16_t code = lastCode << 1;
+
+		printf("%u: ", i + 1);
+		for(size_t j = 0; j < codeCounts[i]; ++j)
+		{
+			FrHuffmanNode* start = pRoot;
+			uint8_t k = i + 1;
+			while(k--)
+			{
+				if(code & (1 << k))
+				{
+					if(!start->one)
+					{
+						start->one = (FrHuffmanNode*)malloc(sizeof(FrHuffmanNode));
+						if(!start->one) return FR_ERROR_UNKNOWN;
+						start->one->symbol = -1;
+						start->one->zero = NULL;
+						start->one->one = NULL;
+					}
+					start = start->one;
+				}
+				else
+				{
+					if(!start->zero)
+					{
+						start->zero = (FrHuffmanNode*)malloc(sizeof(FrHuffmanNode));
+						if(!start->zero) return FR_ERROR_UNKNOWN;
+						start->zero->symbol = -1;
+						start->zero->zero = NULL;
+						start->zero->one = NULL;
+					}
+					start = start->zero;
+				}
+			}
+			start->symbol = 0;
+
+			for(size_t z = 0; z < i + 1; ++z)
+			{
+				printf("%c", code & (1 << (i - z)) ? '1' : '0');
+			}
+			printf("(%zu) ", code);
+			++code;
+		}
+		printf("\n");
+
+		lastCode = code;
+	}
+
+	return FR_SUCCESS;
+}
+
+static void frFreeHuffmanTree(FrHuffmanNode* pRoot)
+{
+	if(!pRoot) return;
+
+	if(pRoot->zero)
+	{
+		frFreeHuffmanTree(pRoot->zero);
+		free(pRoot->zero);
+	}
+	if(pRoot->one)
+	{
+		frFreeHuffmanTree(pRoot->one);
+		free(pRoot->one);
+	}
+}
+
+static FrResult frGetHuffmanSymbol(const FrHuffmanNode* pRoot, FrDeflateIterator* pIterator, uint16_t* pSymbol)
+{
+	if(!pRoot || !pIterator || !pSymbol) return FR_ERROR_INVALID_ARGUMENT;
+
+	uint8_t bit;
+	while(pRoot->symbol == -1)
+	{
+		if(frGetNextBit(pIterator, &bit) != FR_SUCCESS) return FR_ERROR_CORRUPTED_FILE;
+
+		pRoot = bit ? pRoot->one : pRoot->zero;
+		if(!pRoot) return FR_ERROR_INVALID_ARGUMENT;
+	}
+
+	*pSymbol = pRoot->symbol;
+
+	return FR_SUCCESS;
+}
+
+
 FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 {
+	// Check invalid arguments
 	if(!pPath || !pImage) return FR_ERROR_INVALID_ARGUMENT;
 
+	// Open file
 	FILE* file = fopen(pPath, "rb");
 	if(!file) return errno == ENOENT ? FR_ERROR_FILE_NOT_FOUND : FR_ERROR_UNKNOWN;
 
+	// Check PNG signature
 	uint8_t signature[8];
 	if(fread(signature, 1, 8, file) != 8)
 	{
@@ -104,13 +258,13 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 	}
 	if(
 		signature[0] != 137 ||
-		signature[1] !=  80 ||
-		signature[2] !=  78 ||
-		signature[3] !=  71 ||
-		signature[4] !=  13 ||
-		signature[5] !=  10 ||
-		signature[6] !=  26 ||
-		signature[7] !=  10
+		signature[1] != 80  ||
+		signature[2] != 78  ||
+		signature[3] != 71  ||
+		signature[4] != 13  ||
+		signature[5] != 10  ||
+		signature[6] != 26  ||
+		signature[7] != 10
 	)
 	{
 		fclose(file);
@@ -119,12 +273,16 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 
 	bool first = true;
 	bool palette = false;
+	bool data_chunks_started = false;
+	bool data_chunks_finished = false;
 	uint8_t bit_depth;
 	uint8_t* data = NULL;
 	size_t data_size = 0;
 
+	// Loop through PNG chunks
 	while(true)
 	{
+		// Read chunk length
 		uint8_t length_buffer[4];
 		if(fread(length_buffer, 1, 4, file) != 4)
 		{
@@ -141,30 +299,43 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
+		// Read chunk type and data
 		uint8_t* type_and_data = (uint8_t*)malloc(length + 4);
-		if(!type_and_data || fread(type_and_data, 1, length + 4, file) != length + 4)
+		if(!type_and_data)
 		{
 			free(data);
 			fclose(file);
 			return FR_ERROR_UNKNOWN;
 		}
+		if(fread(type_and_data, 1, length + 4, file) != length + 4)
+		{
+			free(type_and_data);
+			free(data);
+			fclose(file);
+			return FR_ERROR_UNKNOWN;
+		}
 
+		// Read chunk CRC
 		uint8_t CRC_buffer[4];
 		if(fread(CRC_buffer, 1, 4, file) != 4)
 		{
+			free(type_and_data);
 			free(data);
 			fclose(file);
 			return FR_ERROR_UNKNOWN;
 		}
 		uint32_t CRC = FR_MSBF_TO_U32(CRC_buffer);
 
+		// Check chunk CRC
 		if(frCRC(type_and_data, length + 4) != CRC)
 		{
+			free(type_and_data);
 			free(data);
 			fclose(file);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
+		// IHDR chunk
 		if(
 			type_and_data[0] == 'I' &&
 			type_and_data[1] == 'H' &&
@@ -172,16 +343,37 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			type_and_data[3] == 'R'
 		)
 		{
+			// IHDR should be first
 			if(length != 13 || !first)
 			{
+				free(type_and_data);
 				free(data);
 				fclose(file);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 
+			// Read image dimnesions
 			pImage->width = FR_MSBF_TO_U32(type_and_data + 4);
 			pImage->height = FR_MSBF_TO_U32(type_and_data + 8);
+			if(pImage->width == 0 || pImage->height == 0)
+			{
+				free(type_and_data);
+				fclose(file);
+				return FR_ERROR_CORRUPTED_FILE;
+			}
+
+			pImage->data = (uint8_t*)malloc(pImage->width * pImage->height * 3);
+			if(!pImage->data)
+			{
+				free(type_and_data);
+				fclose(file);
+				return FR_ERROR_CORRUPTED_FILE;
+			}
+
+			// Read bit depth
 			bit_depth = type_and_data[12];
+
+			// Read color type
 			switch(type_and_data[13])
 			{
 				case 0:
@@ -206,6 +398,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 					break;
 
 				default:
+					free(type_and_data);
 					fclose(file);
 					return FR_ERROR_CORRUPTED_FILE;
 			}
@@ -215,13 +408,16 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			continue;
 		}
 
+		// Check IHDR chunk was encountered
 		if(first)
 		{
+			free(type_and_data);
 			free(data);
 			fclose(file);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
+		// IDAT chunk
 		if(
 			type_and_data[0] == 'I' &&
 			type_and_data[1] == 'D' &&
@@ -229,9 +425,22 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			type_and_data[3] == 'T'
 		)
 		{
+			// Check length and still in data block
+			if(length == 0 || data_chunks_finished)
+			{
+				free(type_and_data);
+				free(data);
+				fclose(file);
+				return FR_ERROR_UNKNOWN;
+			}
+
+			if(!data_chunks_started) data_chunks_started = true;
+
+			// Read data
 			uint8_t* new_data = (uint8_t*)realloc(data, data_size + length);
 			if(!new_data)
 			{
+				free(type_and_data);
 				free(data);
 				fclose(file);
 				return FR_ERROR_UNKNOWN;
@@ -243,6 +452,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			data_size += length;
 		}
 
+		// IEND chunk
 		if(
 			type_and_data[0] == 'I' &&
 			type_and_data[1] == 'E' &&
@@ -250,8 +460,10 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			type_and_data[3] == 'D'
 		)
 		{
+			// Check end of file
 			if(length != 0 || getc(file) != EOF)
 			{
+				free(type_and_data);
 				free(data);
 				fclose(file);
 				return FR_ERROR_CORRUPTED_FILE;
@@ -260,11 +472,108 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			break;
 		}
 
+		// Free chunk data
 		free(type_and_data);
 	}
 
-	free(data);
+	// Close file
 	fclose(file);
+
+	// Check PNG has some data
+	if(data_size == 0)
+	{
+		free(data);
+		return FR_ERROR_CORRUPTED_FILE;
+	}
+
+	// Check zlib header corruption
+	if(FR_MSBF_TO_U16(data) % 31 != 0)
+	{
+		free(data);
+		return FR_ERROR_CORRUPTED_FILE;
+	}
+
+	// Check zlib compression method
+	if((data[0] & 0x0F) != 8)
+	{
+		free(data);
+		return FR_ERROR_CORRUPTED_FILE;
+	}
+
+	// Check deflate window size
+	uint8_t encoded_window = (data[0] & 0xF0) >> 4;
+	if(encoded_window > 7)
+	{
+		free(data);
+		return FR_ERROR_CORRUPTED_FILE;
+	}
+	uint16_t window = 1 << (encoded_window + 8);
+
+	// Check preset dictionnary
+	if(data[1] & 0x20)
+	{
+		free(data);
+		return FR_ERROR_CORRUPTED_FILE;
+	}
+
+	// Create defalte iterator
+	FrDeflateIterator iterator = {
+		.data = data + 2,
+		.size = data_size - 6
+	};
+
+	// Process deflate blocks
+	size_t output_iterator = 0;
+	uint8_t final = false;
+	while(!final)
+	{
+		frGetNextBit(&iterator, &final);
+		printf("Final? %s\n", final ? "yes" : "no");
+
+		uint8_t type_1, type_2;
+		frGetNextBit(&iterator, &type_1);
+		frGetNextBit(&iterator, &type_2);
+		printf("Type: %c%c\n", type_2 ? '1' : '0', type_1 ? '1' : '0');
+
+		if(type_1 && type_2) return FR_ERROR_CORRUPTED_FILE;
+
+		// Not compressed
+		if(!type_1 && !type_2)
+		{
+			iterator.iterator = 0;
+			++iterator.data;
+			--iterator.size;
+
+			uint16_t length = FR_LSBF_TO_U16(iterator.data);
+			if(~length != FR_LSBF_TO_U16(iterator.data + 2)) return FR_ERROR_CORRUPTED_FILE;
+
+			memcpy(pImage->data + output_iterator, iterator.data, length);
+			output_iterator += length;
+
+			continue;
+		}
+
+		if(!type_1 && type_2)
+		{
+
+		}
+	}
+
+	FrHuffmanNode root;
+	uint8_t lengths[] = {3,3,3,3,3,2,4,4};
+	if(frBuildHuffmanTree((void*)1, &root, lengths, sizeof(lengths)) != FR_SUCCESS)
+	{
+		free(data);
+		return FR_ERROR_CORRUPTED_FILE;
+	};
+	free(NULL);
+	frFreeHuffmanTree(&root);
+
+	// Check zlib checksum
+	printf("Checkusm: %lu\n", FR_MSBF_TO_U32(data + data_size - 4)); // TODO: check against checksum computed on decompressed data
+
+	// Free compressed data
+	free(data);
 
 	return FR_SUCCESS;
 }

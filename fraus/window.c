@@ -6,8 +6,6 @@
 
 #include <stdbool.h>
 
-static HINSTANCE instance = NULL;
-
 static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch(message)
@@ -32,6 +30,7 @@ static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPA
 FrResult frCreateWindow(FrWindow* pWindow)
 {
 #ifdef _WIN32
+	static HINSTANCE instance = NULL;
 
 	if(!instance)
 	{
