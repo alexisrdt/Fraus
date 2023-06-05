@@ -7,14 +7,13 @@
 #include <string.h>
 
 // MSBF =  Most Significant Byte First
-// LSBF = Least Significant Byte First
-
 #define FR_MSBF_TO_U16(bytes) \
 (((bytes)[0] << 8) | (bytes)[1])
 
 #define FR_MSBF_TO_U32(bytes) \
 (((bytes)[0] << 24) | ((bytes)[1] << 16) | ((bytes)[2] << 8) | (bytes)[3])
 
+// LSBF = Least Significant Byte First
 #define FR_LSBF_TO_U16(bytes) \
 ((bytes)[0] | ((bytes)[1] << 8))
 
@@ -123,122 +122,6 @@ static FrResult frGetNextBit(FrDeflateIterator* pIterator, uint8_t* pBit)
 
 	return FR_SUCCESS;
 }
-
-typedef struct FrHuffmanNode
-{
-	struct FrHuffmanNode* zero;
-	struct FrHuffmanNode* one;
-	int16_t symbol;
-} FrHuffmanNode;
-
-static FrResult frBuildHuffmanTree(FrDeflateIterator* pIterator, FrHuffmanNode* pRoot, uint8_t* pLengths, size_t lengthCount)
-{
-	if(!pIterator || !pRoot || !pLengths || !lengthCount) return FR_ERROR_INVALID_ARGUMENT;
-
-	pRoot->symbol = -1;
-	pRoot->zero = NULL;
-	pRoot->one = NULL;
-
-	uint8_t codeCounts[8] = {0};
-	for(size_t i = 0; i < lengthCount; ++i) ++codeCounts[pLengths[i] - 1];
-
-	uint16_t total = 0;
-	for(size_t i = 1; i <= 8; ++i)
-	{
-		total = total * 2 + codeCounts[i - 1];
-		if(total > (1 << i)) return FR_ERROR_CORRUPTED_FILE;
-	}
-
-	uint16_t lastCode = 0;
-	for(uint8_t i = 0; i < 8; ++i)
-	{
-		if(codeCounts[i] == 0) continue;
-
-		uint16_t code = lastCode << 1;
-
-		printf("%u: ", i + 1);
-		for(size_t j = 0; j < codeCounts[i]; ++j)
-		{
-			FrHuffmanNode* start = pRoot;
-			uint8_t k = i + 1;
-			while(k--)
-			{
-				if(code & (1 << k))
-				{
-					if(!start->one)
-					{
-						start->one = (FrHuffmanNode*)malloc(sizeof(FrHuffmanNode));
-						if(!start->one) return FR_ERROR_UNKNOWN;
-						start->one->symbol = -1;
-						start->one->zero = NULL;
-						start->one->one = NULL;
-					}
-					start = start->one;
-				}
-				else
-				{
-					if(!start->zero)
-					{
-						start->zero = (FrHuffmanNode*)malloc(sizeof(FrHuffmanNode));
-						if(!start->zero) return FR_ERROR_UNKNOWN;
-						start->zero->symbol = -1;
-						start->zero->zero = NULL;
-						start->zero->one = NULL;
-					}
-					start = start->zero;
-				}
-			}
-			start->symbol = 0;
-
-			for(size_t z = 0; z < i + 1; ++z)
-			{
-				printf("%c", code & (1 << (i - z)) ? '1' : '0');
-			}
-			printf("(%zu) ", code);
-			++code;
-		}
-		printf("\n");
-
-		lastCode = code;
-	}
-
-	return FR_SUCCESS;
-}
-
-static void frFreeHuffmanTree(FrHuffmanNode* pRoot)
-{
-	if(!pRoot) return;
-
-	if(pRoot->zero)
-	{
-		frFreeHuffmanTree(pRoot->zero);
-		free(pRoot->zero);
-	}
-	if(pRoot->one)
-	{
-		frFreeHuffmanTree(pRoot->one);
-		free(pRoot->one);
-	}
-}
-
-static FrResult frGetHuffmanSymbol(const FrHuffmanNode* pRoot, FrDeflateIterator* pIterator, uint16_t* pSymbol)
-{
-	if(!pRoot || !pIterator || !pSymbol) return FR_ERROR_INVALID_ARGUMENT;
-
-	uint8_t bit;
-	while(pRoot->symbol == -1)
-	{
-		if(frGetNextBit(pIterator, &bit) != FR_SUCCESS) return FR_ERROR_CORRUPTED_FILE;
-
-		pRoot = bit ? pRoot->one : pRoot->zero;
-		if(!pRoot) return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	*pSymbol = pRoot->symbol;
-
-	return FR_SUCCESS;
-}
-
 
 FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 {
@@ -559,18 +442,14 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 		}
 	}
 
-	FrHuffmanNode root;
-	uint8_t lengths[] = {3,3,3,3,3,2,4,4};
-	if(frBuildHuffmanTree((void*)1, &root, lengths, sizeof(lengths)) != FR_SUCCESS)
-	{
-		free(data);
-		return FR_ERROR_CORRUPTED_FILE;
-	};
-	free(NULL);
-	frFreeHuffmanTree(&root);
-
 	// Check zlib checksum
-	printf("Checkusm: %lu\n", FR_MSBF_TO_U32(data + data_size - 4)); // TODO: check against checksum computed on decompressed data
+	uint32_t s1 = 1, s2 = 0;
+	for(size_t i = 0; i < output_iterator; ++i)
+	{
+		s1 = (s1 + pImage->data[i]) % 65521;
+		s2 = (s2 + s1) % 65521;
+	}
+	printf("Checkusm: %lu %lu\n", FR_MSBF_TO_U32(data + data_size - 4), (s2 * 65536 + s1)); // TODO: check against checksum computed on decompressed data
 
 	// Free compressed data
 	free(data);
