@@ -4,4 +4,4 @@
 # Except Fraus
 !.gitignore
 !README.md
-!fraus
+!fraus/*
