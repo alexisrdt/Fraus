@@ -123,6 +123,20 @@ static FrResult frGetNextBit(FrDeflateIterator* pIterator, uint8_t* pBit)
 	return FR_SUCCESS;
 }
 
+typedef struct DeflateTableEntry
+{
+	uint16_t code;
+	uint8_t length;
+	struct DeflateTableEntry* pSubTable;
+} DeflateTableEntry;
+
+FrResult frBuildDeflateTable(DeflateTableEntry* pTable)
+{
+
+
+	return FR_SUCCESS;
+}
+
 FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 {
 	// Check invalid arguments
@@ -438,7 +452,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 
 		if(!type_1 && type_2)
 		{
-
+			
 		}
 	}
 
@@ -449,7 +463,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 		s1 = (s1 + pImage->data[i]) % 65521;
 		s2 = (s2 + s1) % 65521;
 	}
-	printf("Checkusm: %lu %lu\n", FR_MSBF_TO_U32(data + data_size - 4), (s2 * 65536 + s1)); // TODO: check against checksum computed on decompressed data
+	printf("Checkusm: %lu %lu\n", FR_MSBF_TO_U32(data + data_size - 4), ((s2 << 16) | s1)); // TODO: check against checksum computed on decompressed data
 
 	// Free compressed data
 	free(data);
