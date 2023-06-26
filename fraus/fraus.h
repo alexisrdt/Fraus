@@ -5,7 +5,7 @@
 #error C99 required
 #endif
 
-#include "images.h"
+#include "images/images.h"
 #include "threads.h"
 #include "utils.h"
 #include "vulkan/vulkan.h"
