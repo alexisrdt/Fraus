@@ -11,6 +11,6 @@
  * - size: number of bytes in the input data
  * - ppResult: buffer in which to store the result
  */
-FrResult frInflate(const uint8_t* pData, size_t size, uint8_t** ppResult);
+FrResult frInflate(const uint8_t* pData, size_t size, uint8_t* pResult);
 
 #endif
