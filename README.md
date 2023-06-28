@@ -1,6 +1,7 @@
 # Fraus
 
 Fraus is a rendering engine based on Vulkan.
+See the [wiki](https://github.com/alexisrdt/Fraus/wiki) for a documentation.
 
 ## Using
 
