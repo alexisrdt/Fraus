@@ -62,6 +62,10 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 
 	switch(message)
 	{
+		case WM_MOUSEMOVE:
+			if(pWindow->handlers.mouseMoveHandler) pWindow->handlers.mouseMoveHandler(LOWORD(lParam), HIWORD(lParam));
+			break;
+
 		case WM_LBUTTONDOWN:
 			if(pWindow->handlers.clickHandler) pWindow->handlers.clickHandler(FR_MOUSE_LEFT);
 			break;
@@ -103,9 +107,6 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
  */
 FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
 {
-	// Check arguments
-	if(!pWindow) return FR_ERROR_INVALID_ARGUMENT;
-
 #ifdef _WIN32
 	static HINSTANCE instance = NULL;
 
@@ -151,10 +152,21 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
 
 	// Show window
 	ShowWindow(pWindow->handle, SW_SHOW);
-
 #endif
 
 	return FR_SUCCESS;
+}
+
+/* Handlers */
+
+/*
+ * Set the mouse move handler
+ * - pWindow: pointer to the window
+ * - handler: the handler
+ */
+void frSetMouseMoveHandler(FrWindow* pWindow, FrMouseMoveHandler handler)
+{
+	pWindow->handlers.mouseMoveHandler = handler;
 }
 
 /*

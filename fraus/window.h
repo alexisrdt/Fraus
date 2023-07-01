@@ -52,12 +52,14 @@ typedef enum FrMouseButton
 } FrMouseButton;
 
 // Handlers
+typedef void(*FrMouseMoveHandler)(uint16_t x, uint16_t y);
 typedef void(*FrClickHandler)(FrMouseButton button);
 typedef void(*FrKeyHandler)(FrKey key);
 typedef void(*FrResizeHandler)(uint16_t newWidth, uint16_t newHeight);
 
 typedef struct FrEventHandlers
 {
+	FrMouseMoveHandler mouseMoveHandler;
 	FrClickHandler clickHandler;
 	FrKeyHandler keyHandler;
 	FrResizeHandler resizeHandler;
@@ -81,6 +83,13 @@ typedef struct FrWindow
 FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow);
 
 /* Handlers */
+
+/*
+ * Set the mouse move handler
+ * - pWindow: pointer to the window
+ * - handler: the handler
+ */
+void frSetMouseMoveHandler(FrWindow* pWindow, FrMouseMoveHandler handler);
 
 /*
  * Set the click handler
