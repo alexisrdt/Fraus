@@ -6,7 +6,47 @@
 
 #include <stdbool.h>
 
+// Window count
 static size_t windowCount = 0;
+
+/*
+ * Translate a Win32 virtual-key code to a FrKey
+ * - virtualKey: the Win32 virtual-key
+ */
+static FrKey frWin32VirtualKeyToFrKey(WPARAM virtualKey)
+{
+	switch(virtualKey)
+	{
+		case 0x41: return FR_KEY_A;
+		case 0x42: return FR_KEY_B;
+		case 0x43: return FR_KEY_C;
+		case 0x44: return FR_KEY_D;
+		case 0x45: return FR_KEY_E;
+		case 0x46: return FR_KEY_F;
+		case 0x47: return FR_KEY_G;
+		case 0x48: return FR_KEY_H;
+		case 0x49: return FR_KEY_I;
+		case 0x4A: return FR_KEY_J;
+		case 0x4B: return FR_KEY_K;
+		case 0x4C: return FR_KEY_L;
+		case 0x4D: return FR_KEY_M;
+		case 0x4E: return FR_KEY_N;
+		case 0x4F: return FR_KEY_O;
+		case 0x50: return FR_KEY_P;
+		case 0x51: return FR_KEY_Q;
+		case 0x52: return FR_KEY_R;
+		case 0x53: return FR_KEY_S;
+		case 0x54: return FR_KEY_T;
+		case 0x55: return FR_KEY_U;
+		case 0x56: return FR_KEY_V;
+		case 0x57: return FR_KEY_W;
+		case 0x58: return FR_KEY_X;
+		case 0x59: return FR_KEY_Y;
+		case 0x5A: return FR_KEY_Z;
+
+		default: return FR_KEY_UNKNOWN;
+	}
+}
 
 /*
  * Win32 window procedure
@@ -15,12 +55,26 @@ static size_t windowCount = 0;
  * - wParam: the WPARAM of the message
  * - lParam: the LPARAM of the message
  */
-static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPARAM lParam)
 {
+	FrWindow* pWindow = (FrWindow*)GetProp(handle, TEXT("FrWindow"));
+
 	switch(message)
 	{
+		case WM_LBUTTONDOWN:
+			if(pWindow->handlers.clickHandler) pWindow->handlers.clickHandler(FR_MOUSE_LEFT);
+			break;
+
+		case WM_RBUTTONDOWN:
+			if(pWindow->handlers.clickHandler) pWindow->handlers.clickHandler(FR_MOUSE_RIGHT);
+			break;
+
+		case WM_KEYDOWN:
+			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam));
+			break;
+
 		case WM_CLOSE:
-			DestroyWindow(window);
+			DestroyWindow(handle);
 			break;
 
 		case WM_DESTROY:
@@ -29,7 +83,7 @@ static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPA
 			break;
 
 		default:
-			return DefWindowProc(window, message, wParam, lParam);
+			return DefWindowProc(handle, message, wParam, lParam);
 	}
 
 	return 0;
@@ -39,6 +93,7 @@ static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPA
 
 /*
  * Create a window
+ * - pTitle: the title of the window
  * - pWindow: pointer to a handle for the window
  */
 FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
@@ -68,7 +123,7 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
 	}
 
 	// TODO: handle specifying title and size (maybe not position, useless)
-	*pWindow = CreateWindowExW(
+	pWindow->handle = CreateWindowExW(
 		WS_EX_OVERLAPPEDWINDOW,
 		L"FrWindow",
 		pTitle,
@@ -80,17 +135,42 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
 		NULL,
 		NULL,
 		instance,
-		NULL
+		pWindow
 	);
-	if(!*pWindow) return FR_ERROR_UNKNOWN;
+	if(!pWindow->handle) return FR_ERROR_UNKNOWN;
 	++windowCount;
 
+	// Setup window data
+	pWindow->handlers.clickHandler = NULL;
+	pWindow->handlers.keyHandler = NULL;
+	SetProp(pWindow->handle, TEXT("FrWindow"), (HANDLE)pWindow);
+
 	// Show window
-	ShowWindow(*pWindow, SW_SHOW);
+	ShowWindow(pWindow->handle, SW_SHOW);
 
 #endif
 
 	return FR_SUCCESS;
+}
+
+/*
+ * Set the click handler
+ * - pWindow: pointer to the window
+ * - handler: the handler
+ */
+void frSetClickHandler(FrWindow* pWindow, FrClickHandler handler)
+{
+	pWindow->handlers.clickHandler = handler;
+}
+
+/*
+ * Set the key handler
+ * - pWindow: pointer to the window
+ * - handler: the handler
+ */
+void frSetKeyHandler(FrWindow* pWindow, FrKeyHandler handler)
+{
+	pWindow->handlers.keyHandler = handler;
 }
 
 /*
