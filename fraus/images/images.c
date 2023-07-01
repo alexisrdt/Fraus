@@ -313,15 +313,15 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			if(!dataChunksStarted) dataChunksStarted = true;
 
 			// Read data
-			uint8_t* new_data = (uint8_t*)realloc(pData, dataSize + length);
-			if(!new_data)
+			uint8_t* pNewData = (uint8_t*)realloc(pData, dataSize + length);
+			if(!pNewData)
 			{
 				free(pTypeAndData);
 				free(pData);
 				fclose(file);
 				return FR_ERROR_UNKNOWN;
 			}
-			pData = new_data;
+			pData = pNewData;
 
 			memcpy(pData + dataSize, pTypeAndData + 4, length);
 
@@ -344,6 +344,8 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 				fclose(file);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
+
+			free(pTypeAndData);
 
 			break;
 		}
@@ -425,57 +427,57 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 	// Undo filtering
 	for(uint32_t i = 0; i < pImage->height; ++i)
 	{
-		switch (pInflateResult[(pImage->width * pImage->type + 1) * i])
+		switch(pInflateResult[(pImage->width * pImage->type + 1) * i])
 		{
 			// Same byte
-		case 0:
-			for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
-			{
-				pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1];
-			}
-			break;
+			case 0:
+				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
+				{
+					pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1];
+				}
+				break;
 
 			// Same byte in previous pixel
-		case 1:
-			for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
-			{
-				pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + (j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j]);
-			}
-			break;
+			case 1:
+				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
+				{
+					pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + (j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j]);
+				}
+				break;
 
 			// Same byte in previous scanline
-		case 2:
-			for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
-			{
-				pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + pImage->data[pImage->width * pImage->type * (i - 1) + j];
-			}
-			break;
+			case 2:
+				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
+				{
+					pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + pImage->data[pImage->width * pImage->type * (i - 1) + j];
+				}
+				break;
 
 			// Same byte in previous pixel in previous scanline
-		case 3:
-			for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
-			{
-				pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + ((j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j]) + pImage->data[pImage->width * pImage->type * (i - 1) + j]) / 2;
-			}
-			break;
+			case 3:
+				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
+				{
+					pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + ((j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j]) + pImage->data[pImage->width * pImage->type * (i - 1) + j]) / 2;
+				}
+				break;
 
 			// Paeth
-		case 4:
-			for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
-			{
-				frPaeth(
-					j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j],
-					pImage->data[pImage->width * pImage->type * (i - 1) + j],
-					j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * (i - 1) - 1) + j],
-					&pImage->data[pImage->width * pImage->type * i + j]
-				);
-				pImage->data[pImage->width * pImage->type * i + j] += pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1];
-			}
-			break;
+			case 4:
+				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
+				{
+					frPaeth(
+						j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j],
+						pImage->data[pImage->width * pImage->type * (i - 1) + j],
+						j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * (i - 1) - 1) + j],
+						&pImage->data[pImage->width * pImage->type * i + j]
+					);
+					pImage->data[pImage->width * pImage->type * i + j] += pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1];
+				}
+				break;
 
 			// Unknown filtering method
-		default:
-			return FR_ERROR_CORRUPTED_FILE;
+			default:
+				return FR_ERROR_CORRUPTED_FILE;
 		}
 	}
 

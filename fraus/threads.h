@@ -40,7 +40,7 @@ typedef pthread_mutex_t FrMutex;
 
 /* Thread */
 
-void frGetNumberOfLogicalCores(uint32_t* pCount);
+FrResult frGetNumberOfLogicalCores(uint32_t* pCount);
 
 FrResult frCreateThread(FrThread* pThread, FrThreadProc proc, void* pArg);
 FrResult frJoinThread(FrThread thread, int* pReturnValue);

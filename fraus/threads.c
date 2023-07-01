@@ -16,23 +16,29 @@
 
 /* Thread */
 
-void frGetNumberOfLogicalCores(uint32_t* pCount)
+FrResult frGetNumberOfLogicalCores(uint32_t* pCount)
 {
+	// Check arguments
+	if(!pCount) return FR_ERROR_INVALID_ARGUMENT;
+
 #ifdef _WIN32
 
-	SYSTEM_INFO system_info;
-	GetSystemInfo(&system_info);
-	*pCount = system_info.dwNumberOfProcessors;
+	SYSTEM_INFO systemInfo;
+	GetSystemInfo(&systemInfo);
+	*pCount = systemInfo.dwNumberOfProcessors;
 
 #else
 
 	*pCount = sysconf(_SC_NPROCESSORS_ONLN);
 
 #endif
+
+	return FR_SUCCESS;
 }
 
 FrResult frCreateThread(FrThread* pThread, FrThreadProc proc, void* pArg)
 {
+	// Check arguments
 	if(!pThread || !proc) return FR_ERROR_INVALID_ARGUMENT;
 
 #ifdef _WIN32
@@ -81,6 +87,7 @@ FrResult frJoinThread(FrThread thread, int* pReturnValue)
 
 FrResult frCreateMutex(FrMutex* pMutex)
 {
+	// Check arguments
 	if(!pMutex) return FR_ERROR_INVALID_ARGUMENT;
 
 #ifdef _WIN32
@@ -102,6 +109,7 @@ FrResult frCreateMutex(FrMutex* pMutex)
 
 FrResult frLockMutex(FrMutex* pMutex)
 {
+	// Check arguments
 	if(!pMutex) return FR_ERROR_INVALID_ARGUMENT;
 
 #ifdef _WIN32
@@ -122,6 +130,7 @@ FrResult frLockMutex(FrMutex* pMutex)
 
 FrResult frUnlockMutex(FrMutex* pMutex)
 {
+	// Check arguments
 	if(!pMutex) return FR_ERROR_INVALID_ARGUMENT;
 
 #ifdef _WIN32
@@ -142,6 +151,7 @@ FrResult frUnlockMutex(FrMutex* pMutex)
 
 FrResult frDestroyMutex(FrMutex* pMutex)
 {
+	// Check arguments
 	if(!pMutex) return FR_ERROR_INVALID_ARGUMENT;
 
 #ifdef _WIN32

@@ -5,18 +5,21 @@
 #ifdef _WIN32
 #include <windows.h>
 
-static HMODULE vulkan_library;
+static HMODULE vulkanLibrary;
 #endif
 
 FrResult frInit()
 {
-	#ifdef _WIN32
-	vulkan_library = LoadLibrary(TEXT("vulkan-1"));
-	if(!vulkan_library) return FR_ERROR_FILE_NOT_FOUND; // TODO: check doc
 
-	vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)GetProcAddress(vulkan_library, "vkGetInstanceProcAddr");
+#ifdef _WIN32
+
+	vulkanLibrary = LoadLibrary(TEXT("vulkan-1"));
+	if(!vulkanLibrary) return FR_ERROR_FILE_NOT_FOUND;
+
+	vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)GetProcAddress(vulkanLibrary, "vkGetInstanceProcAddr");
 	if(!vkGetInstanceProcAddr) return FR_ERROR_UNKNOWN;
-	#endif
+
+#endif
 
 	FR_LOAD_GLOBAL_PFN(vkCreateInstance)
 
@@ -25,9 +28,12 @@ FrResult frInit()
 
 FrResult frFinish()
 {
-	#ifdef _WIN32
-	if(!FreeLibrary(vulkan_library)) return FR_ERROR_UNKNOWN; // TODO: check doc
-	#endif
+
+#ifdef _WIN32
+
+	if(!FreeLibrary(vulkanLibrary)) return FR_ERROR_UNKNOWN;
+
+#endif
 
 	return FR_SUCCESS;
 }
