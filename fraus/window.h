@@ -1,6 +1,7 @@
 #ifndef FRAUS_WINDOW_H
 #define FRAUS_WINDOW_H
 
+#include <stdint.h>
 #include <wchar.h>
 
 #include "utils.h"
@@ -53,11 +54,13 @@ typedef enum FrMouseButton
 // Handlers
 typedef void(*FrClickHandler)(FrMouseButton button);
 typedef void(*FrKeyHandler)(FrKey key);
+typedef void(*FrResizeHandler)(uint16_t newWidth, uint16_t newHeight);
 
 typedef struct FrEventHandlers
 {
 	FrClickHandler clickHandler;
 	FrKeyHandler keyHandler;
+	FrResizeHandler resizeHandler;
 } FrEventHandlers;
 
 // Window type
@@ -92,6 +95,13 @@ void frSetClickHandler(FrWindow* pWindow, FrClickHandler handler);
  * - handler: the handler
  */
 void frSetKeyHandler(FrWindow* pWindow, FrKeyHandler handler);
+
+/*
+ * Set the resize handler
+ * - pWindow: pointer to the window
+ * - handler: the handler
+ */
+void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler);
 
 /*
  * Main loop of the program

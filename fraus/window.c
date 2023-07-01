@@ -1,6 +1,7 @@
 #include "window.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #ifdef _WIN32
 
@@ -73,6 +74,10 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam));
 			break;
 
+		case WM_SIZE:
+			if(pWindow->handlers.resizeHandler) pWindow->handlers.resizeHandler(LOWORD(lParam), HIWORD(lParam));
+			break;
+
 		case WM_CLOSE:
 			DestroyWindow(handle);
 			break;
@@ -141,8 +146,7 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
 	++windowCount;
 
 	// Setup window data
-	pWindow->handlers.clickHandler = NULL;
-	pWindow->handlers.keyHandler = NULL;
+	memset(&pWindow->handlers, 0, sizeof(FrEventHandlers));
 	SetProp(pWindow->handle, TEXT("FrWindow"), (HANDLE)pWindow);
 
 	// Show window
@@ -171,6 +175,16 @@ void frSetClickHandler(FrWindow* pWindow, FrClickHandler handler)
 void frSetKeyHandler(FrWindow* pWindow, FrKeyHandler handler)
 {
 	pWindow->handlers.keyHandler = handler;
+}
+
+/*
+ * Set the resize handler
+ * - pWindow: pointer to the window
+ * - handler: the handler
+ */
+void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler)
+{
+	pWindow->handlers.resizeHandler = handler;
 }
 
 /*
