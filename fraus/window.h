@@ -114,8 +114,8 @@ void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler);
 
 /*
  * Main loop of the program
- * - pReturnValue: pointer to a handle for the return value (can be NULL)
+ * Returns the exit value of the program
  */
-void frMainLoop(int* pReturnValue);
+int frMainLoop();
 
 #endif

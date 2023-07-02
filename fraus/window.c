@@ -83,6 +83,7 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 			break;
 
 		case WM_CLOSE:
+			RemoveProp(handle, TEXT("FrWindow"));
 			DestroyWindow(handle);
 			break;
 
@@ -203,7 +204,7 @@ void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler)
  * Main loop of the program
  * - pReturnValue: pointer to a handle for the return value (can be NULL)
  */
-void frMainLoop(int* pReturnValue)
+int frMainLoop()
 {
 #ifdef _WIN32
 
@@ -214,11 +215,7 @@ void frMainLoop(int* pReturnValue)
 		{
 			// If the message is a quit message, return
 			// (also return the quit value if the pointer to handle isn't NULL)
-			if(message.message == WM_QUIT)
-			{
-				if(pReturnValue) *pReturnValue = (int)message.wParam;
-				return;
-			}
+			if(message.message == WM_QUIT) return (int)message.wParam;
 
 			// Translate and dispatch message to window
 			TranslateMessage(&message);

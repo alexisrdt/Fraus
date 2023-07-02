@@ -9,4 +9,13 @@
 
 #include <vulkan/vulkan.h>
 
+typedef struct FrVulkanData
+{
+	VkInstance instance;
+	VkPhysicalDevice physicalDevice;
+	VkSurfaceKHR surface;
+	VkDevice device;
+	VkSwapchainKHR swapchain;
+} FrVulkanData;
+
 #endif

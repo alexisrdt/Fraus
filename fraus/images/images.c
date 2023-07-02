@@ -95,7 +95,7 @@ static uint32_t frCRC(const uint8_t* pData, uint32_t size)
 	return ~CRC;
 }
 
-static void frPaeth(uint8_t a, uint8_t b, uint8_t c, uint8_t* pResult)
+static uint8_t frPaeth(uint8_t a, uint8_t b, uint8_t c)
 {
 	const int16_t p = a + b - c;
 
@@ -103,17 +103,9 @@ static void frPaeth(uint8_t a, uint8_t b, uint8_t c, uint8_t* pResult)
 	const int16_t pb = abs(p - b);
 	const int16_t pc = abs(p - c);
 
-	if(pa <= pb && pa <= pc)
-	{
-		*pResult = a;
-		return;
-	}
-	if(pb <= pc)
-	{
-		*pResult = b;
-		return;
-	}
-	*pResult = c;
+	if(pa <= pb && pa <= pc) return a;
+	if(pb <= pc) return b;
+	return c;
 }
 
 FrResult frLoadPNG(const char* pPath, FrImage* pImage)
@@ -465,13 +457,13 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 4:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					frPaeth(
-						j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j],
-						pImage->data[pImage->width * pImage->type * (i - 1) + j],
-						j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * (i - 1) - 1) + j],
-						&pImage->data[pImage->width * pImage->type * i + j]
-					);
-					pImage->data[pImage->width * pImage->type * i + j] += pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1];
+					pImage->data[pImage->width * pImage->type * i + j] =
+						pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] +
+						frPaeth(
+							j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j],
+							pImage->data[pImage->width * pImage->type * (i - 1) + j],
+							j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * (i - 1) - 1) + j]
+						);
 				}
 				break;
 
