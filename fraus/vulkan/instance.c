@@ -1,6 +1,7 @@
 #include "instance.h"
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -38,50 +39,76 @@ static bool frExtensionsAvailable(VkExtensionProperties* pAvailableExtensions, u
 	return true;
 }
 
+#ifndef NDEBUG
+static VkBool32 frMessengerCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageTypes, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+{
+#ifdef _WIN32
+	HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
+
+	// Change console color to identify severity
+	switch(messageSeverity)
+	{
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+			SetConsoleTextAttribute(console, FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+			break;
+
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+			SetConsoleTextAttribute(console, FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+			break;
+
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+			SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+			break;
+
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+			SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_INTENSITY);
+			break;
+	}
+#endif
+
+	// vkCreateInstance / vkDestroyInstance messenger or global messenger
+	printf("[%s|", pUserData ? "G" : "I");
+
+	// Message type
+	if(messageTypes & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT)     printf("G");
+	if(messageTypes & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)  printf("V");
+	if(messageTypes & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) printf("P");
+
+	// Message severity
+	printf("|");
+	switch(messageSeverity)
+	{
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+			printf("V");
+			break;
+
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+			printf("I");
+			break;
+
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+			printf("W");
+			break;
+
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+			printf("E");
+			break;
+	}
+
+	// Message
+	printf("] %s\n", pCallbackData->pMessage);
+
+#ifdef _WIN32
+	// Reset console color
+	SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+#endif
+
+	return VK_FALSE;
+}
+#endif
+
 FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVulkanData)
 {
-	uint32_t availableExtensionCount;
-	if(vkEnumerateInstanceExtensionProperties(NULL, &availableExtensionCount, NULL) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-	VkExtensionProperties* pAvailableExtensions = malloc(availableExtensionCount * sizeof(VkExtensionProperties));
-	if(!pAvailableExtensions) return FR_ERROR_OUT_OF_MEMORY;
-	if(vkEnumerateInstanceExtensionProperties(NULL, &availableExtensionCount, pAvailableExtensions) != VK_SUCCESS)
-	{
-		free(pAvailableExtensions);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	const char* ppExtensions[] = {
-		VK_KHR_SURFACE_EXTENSION_NAME,
-#ifdef _WIN32
-		VK_KHR_WIN32_SURFACE_EXTENSION_NAME
-#endif
-	};
-	const uint32_t extensionCount = sizeof(ppExtensions) / sizeof(const char*);
-
-	if(!frExtensionsAvailable(pAvailableExtensions, availableExtensionCount, ppExtensions, extensionCount))
-	{
-		free(pAvailableExtensions);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	free(pAvailableExtensions);
-
-	VkApplicationInfo applicationInfo = {
-		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-		.pApplicationName = pName,
-		.applicationVersion = version,
-		.pEngineName = "Fraus",
-		.engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 1),
-		.apiVersion = VK_API_VERSION_1_0
-	};
-
-	VkInstanceCreateInfo createInfo = {
-		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-		.pApplicationInfo = &applicationInfo,
-		.enabledExtensionCount = sizeof(ppExtensions) / sizeof(const char*),
-		.ppEnabledExtensionNames = ppExtensions
-	};
-
 #ifndef NDEBUG
 	uint32_t availableLayerCount;
 	if(vkEnumerateInstanceLayerProperties(&availableLayerCount, NULL) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
@@ -96,18 +123,118 @@ FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVu
 	const char* ppLayers[] = {"VK_LAYER_KHRONOS_validation"};
 	const uint32_t layerCount = sizeof(ppLayers) / sizeof(const char*);
 
-	if(frLayersAvailable(pAvailableLayers, availableLayerCount, ppLayers, layerCount))
-	{
-		createInfo.enabledLayerCount = layerCount;
-		createInfo.ppEnabledLayerNames = ppLayers;
-	}
+	bool validationLayerAvailable = frLayersAvailable(pAvailableLayers, availableLayerCount, ppLayers, layerCount);
+	if(!validationLayerAvailable) printf("Validation layers not found.\n");
 
 	free(pAvailableLayers);
 #endif
 
+	uint32_t availableExtensionCount;
+	if(vkEnumerateInstanceExtensionProperties(NULL, &availableExtensionCount, NULL) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	VkExtensionProperties* pAvailableExtensions = malloc(availableExtensionCount * sizeof(VkExtensionProperties));
+	if(!pAvailableExtensions) return FR_ERROR_OUT_OF_MEMORY;
+	if(vkEnumerateInstanceExtensionProperties(NULL, &availableExtensionCount, pAvailableExtensions) != VK_SUCCESS)
+	{
+		free(pAvailableExtensions);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	const char* ppExtensions[] = {
+		VK_KHR_SURFACE_EXTENSION_NAME,
+#ifdef _WIN32
+		VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#endif
+#ifndef NDEBUG
+		VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+#endif
+	};
+	const uint32_t extensionCount = sizeof(ppExtensions) / sizeof(const char*);
+
+#ifndef NDEBUG
+	if(!frExtensionsAvailable(pAvailableExtensions, availableExtensionCount, ppExtensions, extensionCount - 1))
+	{
+		free(pAvailableExtensions);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	pVulkanData->debugExtensionAvailable = frExtensionsAvailable(pAvailableExtensions, availableExtensionCount, ppExtensions + extensionCount - 1, 1);
+	free(pAvailableExtensions);
+
+	if(!pVulkanData->debugExtensionAvailable && validationLayerAvailable)
+	{
+		uint32_t availableExtensionCount;
+		if(vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &availableExtensionCount, NULL) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+		VkExtensionProperties* pAvailableExtensions = malloc(availableExtensionCount * sizeof(VkExtensionProperties));
+		if(!pAvailableExtensions) return FR_ERROR_OUT_OF_MEMORY;
+		if(vkEnumerateInstanceExtensionProperties(NULL, &availableExtensionCount, pAvailableExtensions) != VK_SUCCESS)
+		{
+			free(pAvailableExtensions);
+			return FR_ERROR_UNKNOWN;
+		}
+
+		pVulkanData->debugExtensionAvailable = frExtensionsAvailable(pAvailableExtensions, availableExtensionCount, ppExtensions + extensionCount - 1, 1);
+		free(pAvailableExtensions);
+	}
+
+	if(!pVulkanData->debugExtensionAvailable) printf("Debug extension not found.\n");
+#else
+	if(!frExtensionsAvailable(pAvailableExtensions, availableExtensionCount, ppExtensions, extensionCount))
+	{
+		free(pAvailableExtensions);
+		return FR_ERROR_UNKNOWN;
+	}
+	free(pAvailableExtensions);
+#endif
+
+#ifndef NDEBUG
+	VkDebugUtilsMessengerCreateInfoEXT messengerCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+		.messageSeverity =
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT    |
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+		.messageType =
+			VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT    |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+		.pfnUserCallback = frMessengerCallback
+	};
+#endif
+
+	VkApplicationInfo applicationInfo = {
+		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+		.pApplicationName = pName,
+		.applicationVersion = version,
+		.pEngineName = "Fraus",
+		.engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 1),
+		.apiVersion = VK_API_VERSION_1_0
+	};
+
+	VkInstanceCreateInfo createInfo = {
+		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+		.pApplicationInfo = &applicationInfo,
+#ifndef NDEBUG
+		.pNext = pVulkanData->debugExtensionAvailable ? &messengerCreateInfo : NULL,
+		.enabledLayerCount = validationLayerAvailable ? layerCount : 0,
+		.ppEnabledLayerNames = ppLayers,
+		.enabledExtensionCount = pVulkanData->debugExtensionAvailable ? extensionCount : extensionCount - 1,
+#else
+		.enabledExtensionCount = extensionCount,
+#endif
+		.ppEnabledExtensionNames = ppExtensions
+	};
+
 	if(vkCreateInstance(&createInfo, NULL, &pVulkanData->instance) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkDestroyInstance)
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkCreateDebugUtilsMessengerEXT)
+		FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkDestroyDebugUtilsMessengerEXT)
+	}
+#endif
 #ifdef _WIN32
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkCreateWin32SurfaceKHR)
 #endif
@@ -120,6 +247,14 @@ FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVu
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkEnumerateDeviceLayerProperties)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkEnumerateDeviceExtensionProperties)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkCreateDevice)
+
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		messengerCreateInfo.pUserData = &pVulkanData->instance;
+		if(vkCreateDebugUtilsMessengerEXT(pVulkanData->instance, &messengerCreateInfo, NULL, &pVulkanData->messenger) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
 
 	return FR_SUCCESS;
 }
@@ -295,7 +430,7 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 		.imageArrayLayers = 1,
 		.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 		.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-		.queueFamilyIndexCount = VK_QUEUE_FAMILY_IGNORED,
+		.queueFamilyIndexCount = 0,
 		.pQueueFamilyIndices = NULL,
 		.preTransform = surfaceCapabilities.currentTransform,
 		.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,

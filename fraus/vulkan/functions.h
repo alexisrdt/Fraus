@@ -29,6 +29,10 @@ FR_DECLARE_PFN(vkEnumerateInstanceLayerProperties)
 FR_DECLARE_PFN(vkEnumerateInstanceExtensionProperties)
 
 FR_DECLARE_PFN(vkDestroyInstance)
+#ifndef NDEBUG
+FR_DECLARE_PFN(vkCreateDebugUtilsMessengerEXT)
+FR_DECLARE_PFN(vkDestroyDebugUtilsMessengerEXT)
+#endif
 FR_DECLARE_PFN(vkEnumeratePhysicalDevices)
 FR_DECLARE_PFN(vkGetPhysicalDeviceSurfaceCapabilitiesKHR)
 FR_DECLARE_PFN(vkGetPhysicalDeviceSurfaceFormatsKHR)
