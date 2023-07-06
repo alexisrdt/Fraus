@@ -25,6 +25,7 @@ if(!name) return FR_ERROR_UNKNOWN;
 FR_DECLARE_PFN(vkGetInstanceProcAddr)
 
 FR_DECLARE_PFN(vkCreateInstance)
+FR_DECLARE_PFN(vkEnumerateInstanceLayerProperties)
 FR_DECLARE_PFN(vkEnumerateInstanceExtensionProperties)
 
 FR_DECLARE_PFN(vkDestroyInstance)
@@ -37,6 +38,7 @@ FR_DECLARE_PFN(vkCreateWin32SurfaceKHR)
 #endif
 FR_DECLARE_PFN(vkDestroySurfaceKHR)
 FR_DECLARE_PFN(vkGetDeviceProcAddr)
+FR_DECLARE_PFN(vkEnumerateDeviceLayerProperties)
 FR_DECLARE_PFN(vkEnumerateDeviceExtensionProperties)
 FR_DECLARE_PFN(vkCreateDevice)
 

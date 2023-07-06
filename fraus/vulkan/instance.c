@@ -6,6 +6,22 @@
 
 #include "functions.h"
 
+static bool frLayersAvailable(VkLayerProperties* pAvailableLayers, uint32_t availableLayerCount, const char** ppLayers, uint32_t layerCount)
+{
+	for(uint32_t i = 0; i < layerCount; ++i)
+	{
+		uint32_t j;
+		for(j = 0; j < availableLayerCount; ++j)
+		{
+			if(strcmp(ppLayers[i], pAvailableLayers[j].layerName) == 0) break;
+		}
+
+		if(j == availableLayerCount) return false;
+	}
+
+	return true;
+}
+
 static bool frExtensionsAvailable(VkExtensionProperties* pAvailableExtensions, uint32_t availableExtensionCount, const char** ppExtensions, uint32_t extensionCount)
 {
 	for(uint32_t i = 0; i < extensionCount; ++i)
@@ -40,13 +56,15 @@ FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVu
 		VK_KHR_WIN32_SURFACE_EXTENSION_NAME
 #endif
 	};
-	uint32_t extensionCount = sizeof(ppExtensions) / sizeof(const char*);
+	const uint32_t extensionCount = sizeof(ppExtensions) / sizeof(const char*);
 
 	if(!frExtensionsAvailable(pAvailableExtensions, availableExtensionCount, ppExtensions, extensionCount))
 	{
 		free(pAvailableExtensions);
 		return FR_ERROR_UNKNOWN;
 	}
+
+	free(pAvailableExtensions);
 
 	VkApplicationInfo applicationInfo = {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -64,13 +82,30 @@ FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVu
 		.ppEnabledExtensionNames = ppExtensions
 	};
 
-	if(vkCreateInstance(&createInfo, NULL, &pVulkanData->instance) != VK_SUCCESS)
+#ifndef NDEBUG
+	uint32_t availableLayerCount;
+	if(vkEnumerateInstanceLayerProperties(&availableLayerCount, NULL) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	VkLayerProperties* pAvailableLayers = malloc(availableLayerCount * sizeof(VkLayerProperties));
+	if(!pAvailableLayers) return FR_ERROR_OUT_OF_MEMORY;
+	if(vkEnumerateInstanceLayerProperties(&availableLayerCount, pAvailableLayers) != VK_SUCCESS)
 	{
-		free(pAvailableExtensions);
+		free(pAvailableLayers);
 		return FR_ERROR_UNKNOWN;
 	}
 
-	free(pAvailableExtensions);
+	const char* ppLayers[] = {"VK_LAYER_KHRONOS_validation"};
+	const uint32_t layerCount = sizeof(ppLayers) / sizeof(const char*);
+
+	if(frLayersAvailable(pAvailableLayers, availableLayerCount, ppLayers, layerCount))
+	{
+		createInfo.enabledLayerCount = layerCount;
+		createInfo.ppEnabledLayerNames = ppLayers;
+	}
+
+	free(pAvailableLayers);
+#endif
+
+	if(vkCreateInstance(&createInfo, NULL, &pVulkanData->instance) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkDestroyInstance)
 #ifdef _WIN32
@@ -82,6 +117,7 @@ FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVu
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceSurfaceFormatsKHR)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceSurfacePresentModesKHR)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetDeviceProcAddr)
+	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkEnumerateDeviceLayerProperties)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkEnumerateDeviceExtensionProperties)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkCreateDevice)
 
@@ -138,13 +174,15 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	}
 
 	const char* ppExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-	uint32_t extensionCount = sizeof(ppExtensions) / sizeof(const char*);
+	const uint32_t extensionCount = sizeof(ppExtensions) / sizeof(const char*);
 
 	if(!frExtensionsAvailable(pAvailableExtensions, availableExtensionCount, ppExtensions, extensionCount))
 	{
 		free(pAvailableExtensions);
 		return FR_ERROR_UNKNOWN;
 	}
+
+	free(pAvailableExtensions);
 
 	VkDeviceQueueCreateInfo queueCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -161,13 +199,31 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 		.ppEnabledExtensionNames = ppExtensions
 	};
 
-	if(vkCreateDevice(pVulkanData->physicalDevice, &createInfo, NULL, &pVulkanData->device) != VK_SUCCESS)
+// Load device layers for compatibility
+#ifndef NDEBUG
+	uint32_t availableLayerCount;
+	if(vkEnumerateDeviceLayerProperties(pVulkanData->physicalDevice, &availableLayerCount, NULL) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	VkLayerProperties* pAvailableLayers = malloc(availableLayerCount * sizeof(VkLayerProperties));
+	if(!pAvailableLayers) return FR_ERROR_OUT_OF_MEMORY;
+	if(vkEnumerateDeviceLayerProperties(pVulkanData->physicalDevice, &availableLayerCount, pAvailableLayers) != VK_SUCCESS)
 	{
-		free(pAvailableExtensions);
+		free(pAvailableLayers);
 		return FR_ERROR_UNKNOWN;
 	}
 
-	free(pAvailableExtensions);
+	const char* ppLayers[] = {"VK_LAYER_KHRONOS_validation"};
+	const uint32_t layerCount = sizeof(ppLayers) / sizeof(const char*);
+
+	if(frLayersAvailable(pAvailableLayers, availableLayerCount, ppLayers, layerCount))
+	{
+		createInfo.enabledLayerCount = layerCount;
+		createInfo.ppEnabledLayerNames = ppLayers;
+	}
+
+	free(pAvailableLayers);
+#endif
+
+	if(vkCreateDevice(pVulkanData->physicalDevice, &createInfo, NULL, &pVulkanData->device) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyDevice)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateSwapchainKHR)
@@ -251,10 +307,12 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 	if(vkCreateSwapchainKHR(pVulkanData->device, &createInfo, NULL, &pVulkanData->swapchain) != VK_SUCCESS)
 	{
 		free(pSurfaceFormats);
+		free(pPresentModes);
 		return EXIT_FAILURE;
 	}
 
 	free(pSurfaceFormats);
+	free(pPresentModes);
 
 	return FR_SUCCESS;
 }

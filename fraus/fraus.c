@@ -21,6 +21,7 @@ FrResult frInit()
 
 #endif
 
+	FR_LOAD_GLOBAL_PFN(vkEnumerateInstanceLayerProperties)
 	FR_LOAD_GLOBAL_PFN(vkEnumerateInstanceExtensionProperties)
 	FR_LOAD_GLOBAL_PFN(vkCreateInstance)
 
