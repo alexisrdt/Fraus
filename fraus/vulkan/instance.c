@@ -40,7 +40,7 @@ static bool frExtensionsAvailable(VkExtensionProperties* pAvailableExtensions, u
 }
 
 #ifndef NDEBUG
-static VkBool32 frMessengerCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageTypes, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+static VKAPI_ATTR VkBool32 VKAPI_CALL frMessengerCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageTypes, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
 {
 #ifdef _WIN32
 	HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
