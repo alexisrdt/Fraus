@@ -82,23 +82,15 @@ typedef struct FrInflateTableEntry
 /*
  * Read the next bit in the input data stream if available
  * - pIterator: iterator over the deflate encoded input data
- * - pBit: output in which the value of the next bit will be stored
  */
-static FrResult frNextBit(FrInflateIterator* pIterator, uint8_t* pBit)
+static uint8_t frNextBit(FrInflateIterator* pIterator)
 {
-	// Check arguments
-	if(!pIterator || !pBit) return FR_ERROR_INVALID_ARGUMENT;
-
 	// If the input has already been entirely read, the last code may still need some bits
 	// to match the table bit length, therefore return 0
-	if(!pIterator->size)
-	{
-		*pBit = 0;
-		return FR_SUCCESS;
-	}
+	if(!pIterator->size) return 0;
 
 	// Store the value of the bit
-	*pBit = ((*pIterator->pData) & (1 << pIterator->iterator)) >> pIterator->iterator;
+	uint8_t bit = ((*pIterator->pData) & (1 << pIterator->iterator)) >> pIterator->iterator;
 
 	// Move the byte iterator by one place
 	++pIterator->iterator;
@@ -111,7 +103,7 @@ static FrResult frNextBit(FrInflateIterator* pIterator, uint8_t* pBit)
 		--pIterator->size;
 	}
 
-	return FR_SUCCESS;
+	return bit;
 }
 
 /*
@@ -120,9 +112,6 @@ static FrResult frNextBit(FrInflateIterator* pIterator, uint8_t* pBit)
  */
 static void frFinishByte(FrInflateIterator* pIterator)
 {
-	// Check arguments
-	if(!pIterator) return;
-
 	// If the iterator is already pointing to the first bit of a byte, there is nothing to do
 	// Otherwise, start the next byte
 	if(pIterator->iterator)
@@ -141,23 +130,16 @@ static void frFinishByte(FrInflateIterator* pIterator)
  */
 static FrResult frLSBFBits(FrInflateIterator* pIterator, uint8_t count, uint16_t* pResult)
 {
-	// Check arguments
-	if(!pIterator || !pResult) return FR_ERROR_INVALID_ARGUMENT;
-
 	// Check that input has not already been entirely read
 	if(!pIterator->size) return FR_ERROR_CORRUPTED_FILE;
 
 	// Clear the output
 	*pResult = 0;
 
-	uint8_t nextBit;
 	for(uint8_t bitPlace = 0; bitPlace < count; ++bitPlace)
 	{
-		// Read the next bit
-		if(frNextBit(pIterator, &nextBit) != FR_SUCCESS) return FR_ERROR_CORRUPTED_FILE;
-
-		// Store it in the bitPlace-th place of the result
-		*pResult |= (uint16_t)nextBit << bitPlace;
+		// Store the next bit in the bitPlace-th place of the result
+		*pResult |= (uint16_t)frNextBit(pIterator) << bitPlace;
 	}
 
 	return FR_SUCCESS;
@@ -171,23 +153,16 @@ static FrResult frLSBFBits(FrInflateIterator* pIterator, uint8_t count, uint16_t
  */
 static FrResult frMSBFBits(FrInflateIterator* pIterator, uint8_t count, uint16_t* pResult)
 {
-	// Check arguments
-	if(!pIterator || !pResult) return FR_ERROR_INVALID_ARGUMENT;
-
 	// Check that input has not already been entirely read
 	if(!pIterator->size) return FR_ERROR_CORRUPTED_FILE;
 
 	// Clear the output
 	*pResult = 0;
 
-	uint8_t nextBit;
 	while(count--)
 	{
-		// Read the next bit
-		if(frNextBit(pIterator, &nextBit) != FR_SUCCESS) return FR_ERROR_CORRUPTED_FILE;
-
-		// Append it at the end of the result
-		*pResult = (*pResult << 1) | nextBit;
+		// Append the next bit at the end of the result
+		*pResult = (*pResult << 1) | frNextBit(pIterator);
 	}
 
 	return FR_SUCCESS;
@@ -200,9 +175,6 @@ static FrResult frMSBFBits(FrInflateIterator* pIterator, uint8_t count, uint16_t
  */
 static void frReturnBits(FrInflateIterator* pIterator, uint8_t count)
 {
-	// Check arguments
-	if(!pIterator || !count) return;
-
 	// Count how many whole bytes are to be returned
 	div_t byteRatio = div(count, 8);
 	uint8_t overflow = byteRatio.rem > pIterator->iterator ? 1 : 0;
@@ -224,9 +196,6 @@ static void frReturnBits(FrInflateIterator* pIterator, uint8_t count)
  */
 static FrResult frBuildInflateTable(uint8_t tableLength, const uint8_t* pSymbolLength, uint16_t symbolCount, const uint16_t* pLengths, uint8_t maxLength, FrInflateTableEntry** ppTable)
 {
-	// Check arguments
-	if(!tableLength || !pSymbolLength || !symbolCount || !pLengths || !maxLength || !ppTable) return FR_ERROR_INVALID_ARGUMENT;
-
 	// Genreate ranges
 	FrInflateRange* pRanges = malloc(symbolCount * sizeof(FrInflateRange));
 	if(!pRanges) return FR_ERROR_OUT_OF_MEMORY;
@@ -357,9 +326,6 @@ static FrResult frBuildInflateTable(uint8_t tableLength, const uint8_t* pSymbolL
  */
 static void frFreeInflateTable(FrInflateTableEntry* pTable, uint8_t tableLength)
 {
-	// Check arguments
-	if(!pTable || !tableLength) return;
-
 	// Free all contiguous entries with a length greater than the table length
 	for(int16_t entryCode = (INT16_C(1) << tableLength) - 1; entryCode >= 0; --entryCode)
 	{
@@ -384,9 +350,6 @@ static void frFreeInflateTable(FrInflateTableEntry* pTable, uint8_t tableLength)
  */
 static FrResult frReadFromTable(FrInflateIterator* pIterator, const FrInflateTableEntry* pTable, uint8_t tableLength, uint8_t maxLength, uint16_t* pSymbol)
 {
-	// Check arguments
-	if(!pSymbol || !pIterator || !pTable || !maxLength || !tableLength) return FR_ERROR_INVALID_ARGUMENT;
-
 	// Get code
 	uint16_t code;
 	if(frMSBFBits(pIterator, tableLength, &code) != FR_SUCCESS) return FR_ERROR_CORRUPTED_FILE;
@@ -425,11 +388,9 @@ static FrResult frReadFromTable(FrInflateIterator* pIterator, const FrInflateTab
  */
 static FrResult frInflateBlock(FrInflateData* pData)
 {
-	// Check arguments
-	if(!pData) return FR_ERROR_INVALID_ARGUMENT;
-
 	// Read the final block flag
-	if(frNextBit(&pData->iterator, &pData->final) != FR_SUCCESS) return FR_ERROR_CORRUPTED_FILE;
+	if(pData->iterator.size == 0) return FR_ERROR_CORRUPTED_FILE;
+	pData->final = frNextBit(&pData->iterator);
 
 	// Read the block type
 	uint16_t blockType;
@@ -751,9 +712,6 @@ static FrResult frInflateBlock(FrInflateData* pData)
  */
 FrResult frInflate(const uint8_t* pData, size_t size, uint8_t* pResult)
 {
-	// Check arguments
-	if(!pData || !size || !pResult) return FR_ERROR_INVALID_ARGUMENT;
-
 	// Build the inflate data
 	FrInflateData data = {
 		.iterator = {

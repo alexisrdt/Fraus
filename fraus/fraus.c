@@ -1,6 +1,6 @@
 #include "fraus.h"
 
-#include "vulkan/functions.h"
+#include <stdlib.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -38,4 +38,48 @@ FrResult frFinish()
 #endif
 
 	return FR_SUCCESS;
+}
+
+/*
+ * Main loop of the program
+ * - pReturnValue: pointer to a handle for the return value (can be NULL)
+ */
+int frMainLoop(FrVulkanData* pVulkanData)
+{
+#ifdef _WIN32
+
+	int returnValue;
+	MSG message;
+	while(true)
+	{
+		// Handle events
+		while(PeekMessage(&message, NULL, 0, 0, PM_REMOVE))
+		{
+			// If the message is a quit message, return
+			// (also return the quit value if the pointer to handle isn't NULL)
+			if(message.message == WM_QUIT)
+			{
+				returnValue = (int)message.wParam;
+				goto end;
+			}
+
+			// Translate and dispatch message to window
+			TranslateMessage(&message);
+			DispatchMessage(&message);
+		}
+
+		// Render
+		if(frDrawFrame(pVulkanData) != FR_SUCCESS)
+		{
+			returnValue = EXIT_FAILURE;
+			break;
+		}
+	}
+	end:
+
+	if(vkDeviceWaitIdle(pVulkanData->device) != VK_SUCCESS) return EXIT_FAILURE;
+
+	return returnValue;
+
+#endif
 }

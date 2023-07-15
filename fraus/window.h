@@ -112,10 +112,4 @@ void frSetKeyHandler(FrWindow* pWindow, FrKeyHandler handler);
  */
 void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler);
 
-/*
- * Main loop of the program
- * Returns the exit value of the program
- */
-int frMainLoop();
-
 #endif

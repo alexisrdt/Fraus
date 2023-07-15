@@ -12,6 +12,14 @@
 #include "window.h"
 
 FrResult frInit();
+
+/*
+ * Main loop of the program
+ * Returns the exit value of the program
+ */
+int frMainLoop(FrVulkanData* pVulkanData);
+
 FrResult frFinish();
+
 
 #endif

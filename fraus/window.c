@@ -199,31 +199,3 @@ void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler)
 {
 	pWindow->handlers.resizeHandler = handler;
 }
-
-/*
- * Main loop of the program
- * - pReturnValue: pointer to a handle for the return value (can be NULL)
- */
-int frMainLoop()
-{
-#ifdef _WIN32
-
-	MSG message;
-	while(true)
-	{
-		while(PeekMessage(&message, NULL, 0, 0, PM_REMOVE))
-		{
-			// If the message is a quit message, return
-			// (also return the quit value if the pointer to handle isn't NULL)
-			if(message.message == WM_QUIT) return (int)message.wParam;
-
-			// Translate and dispatch message to window
-			TranslateMessage(&message);
-			DispatchMessage(&message);
-		}
-
-		// Render
-	}
-
-#endif
-}

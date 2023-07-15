@@ -18,10 +18,24 @@ typedef struct FrVulkanData
 	bool debugExtensionAvailable;
 	VkDebugUtilsMessengerEXT messenger;
 #endif
-	VkPhysicalDevice physicalDevice;
 	VkSurfaceKHR surface;
+	VkPhysicalDevice physicalDevice;
+	uint32_t queueFamily;
 	VkDevice device;
+	VkQueue queue;
+	VkExtent2D extent;
+	VkFormat format;
 	VkSwapchainKHR swapchain;
+	VkImage* pImages;
+	VkImageView* pImageViews;
+	VkFramebuffer* pFramebuffers;
+	uint32_t imageCount;
+	VkRenderPass renderPass;
+	VkCommandPool commandPool;
+	VkCommandBuffer commandBuffer;
+	VkSemaphore imageAvailableSemaphore;
+	VkSemaphore renderFinishedSemaphore;
+	VkFence frameInFlightFence;
 } FrVulkanData;
 
 #endif
