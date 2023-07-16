@@ -1,9 +1,19 @@
 # Ignore all
 *
 
-# Except Fraus
+# Except GitHub
+!/.github
+!/.github/**
+
+# Except Git
 !.gitignore
-!README.md
+!CODE_OF_CONDUCT.md
+!CONTRIBUTING.md
 !LICENSE
+!README.md
+!SECURITY.md
+!pull_request_template.md
+
+# Except Fraus
 !/fraus
 !/fraus/**
