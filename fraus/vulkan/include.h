@@ -11,6 +11,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include "../window.h"
+
 typedef struct FrVulkanData
 {
 	VkInstance instance;
@@ -18,6 +20,7 @@ typedef struct FrVulkanData
 	bool debugExtensionAvailable;
 	VkDebugUtilsMessengerEXT messenger;
 #endif
+	FrWindow window;
 	VkSurfaceKHR surface;
 	VkPhysicalDevice physicalDevice;
 	uint32_t queueFamily;

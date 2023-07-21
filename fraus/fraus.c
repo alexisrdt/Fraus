@@ -69,10 +69,13 @@ int frMainLoop(FrVulkanData* pVulkanData)
 		}
 
 		// Render
-		if(frDrawFrame(pVulkanData) != FR_SUCCESS)
+		if(pVulkanData->extent.width > 0 && pVulkanData->extent.height > 0)
 		{
-			returnValue = EXIT_FAILURE;
-			break;
+			if(frDrawFrame(pVulkanData) != FR_SUCCESS)
+			{
+				returnValue = EXIT_FAILURE;
+				break;
+			}
 		}
 	}
 	end:

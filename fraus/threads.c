@@ -16,31 +16,23 @@
 
 /* Thread */
 
-FrResult frGetNumberOfLogicalCores(uint32_t* pCount)
+uint32_t frGetNumberOfLogicalCores()
 {
-	// Check arguments
-	if(!pCount) return FR_ERROR_INVALID_ARGUMENT;
-
 #ifdef _WIN32
 
 	SYSTEM_INFO systemInfo;
 	GetSystemInfo(&systemInfo);
-	*pCount = systemInfo.dwNumberOfProcessors;
+	return systemInfo.dwNumberOfProcessors;
 
 #else
 
-	*pCount = sysconf(_SC_NPROCESSORS_ONLN);
+	reutrn sysconf(_SC_NPROCESSORS_ONLN);
 
 #endif
-
-	return FR_SUCCESS;
 }
 
 FrResult frCreateThread(FrThread* pThread, FrThreadProc proc, void* pArg)
 {
-	// Check arguments
-	if(!pThread || !proc) return FR_ERROR_INVALID_ARGUMENT;
-
 #ifdef _WIN32
 
 	*pThread = (FrThread)_beginthreadex(NULL, 0, proc, pArg, 0, NULL);
@@ -85,11 +77,8 @@ FrResult frJoinThread(FrThread thread, int* pReturnValue)
 
 /* Mutex */
 
-FrResult frCreateMutex(FrMutex* pMutex)
+FrResult frInitializeMutex(FrMutex* pMutex)
 {
-	// Check arguments
-	if(!pMutex) return FR_ERROR_INVALID_ARGUMENT;
-
 #ifdef _WIN32
 
 	InitializeCriticalSection(pMutex);
@@ -109,9 +98,6 @@ FrResult frCreateMutex(FrMutex* pMutex)
 
 FrResult frLockMutex(FrMutex* pMutex)
 {
-	// Check arguments
-	if(!pMutex) return FR_ERROR_INVALID_ARGUMENT;
-
 #ifdef _WIN32
 
 	EnterCriticalSection(pMutex);
@@ -130,9 +116,6 @@ FrResult frLockMutex(FrMutex* pMutex)
 
 FrResult frUnlockMutex(FrMutex* pMutex)
 {
-	// Check arguments
-	if(!pMutex) return FR_ERROR_INVALID_ARGUMENT;
-
 #ifdef _WIN32
 
 	LeaveCriticalSection(pMutex);
@@ -151,9 +134,6 @@ FrResult frUnlockMutex(FrMutex* pMutex)
 
 FrResult frDestroyMutex(FrMutex* pMutex)
 {
-	// Check arguments
-	if(!pMutex) return FR_ERROR_INVALID_ARGUMENT;
-
 #ifdef _WIN32
 
 	DeleteCriticalSection(pMutex);
@@ -163,6 +143,92 @@ FrResult frDestroyMutex(FrMutex* pMutex)
 	int res = pthread_mutex_destroy(pMutex);
 
 	if(res == EBUSY || res == EINVAL) return FR_ERROR_INVALID_ARGUMENT;
+	if(res != 0) return FR_ERROR_UNKNOWN;
+
+#endif
+
+	return FR_SUCCESS;
+}
+
+/* Condition variable */
+
+FrResult frInitializeConditionVariable(FrConditionVariable* pConditionVariable)
+{
+#ifdef _WIN32
+
+	InitializeConditionVariable(pConditionVariable);
+
+#else
+
+	int res = pthread_cond_init(pConditionVariable, NULL);
+
+	if(res == EBUSY) return FR_ERROR_INVALID_ARGUMENT;
+	if(res == EAGAIN || res == ENOMEM) return FR_ERROR_OUT_OF_MEMORY;
+	if(res != 0) return FR_ERROR_UNKNOWN;
+
+#endif
+
+	return FR_SUCCESS;
+}
+
+FrResult frWaitConditionVariable(FrConditionVariable* pConditionVariable, FrMutex* pMutex) // TODO
+{
+#ifdef _WIN32
+
+	if(!SleepConditionVariableCS(pConditionVariable, pMutex, INFINITE)) return FR_ERROR_UNKNOWN;
+
+#else
+
+	int res = pthread_cond_wait(pConditionVariable, pMutex);
+	if(res == EINVAL) return FR_ERROR_INVALID_ARGUMENT;
+	if(res != 0) return FR_ERROR_UNKNOWN;
+
+#endif
+
+	return FR_SUCCESS;
+}
+
+FrResult frSignalConditionVariable(FrConditionVariable* pConditionVariable) // TODO
+{
+#ifdef _WIN32
+
+	WakeConditionVariable(pConditionVariable);
+
+#else
+
+	int res = pthread_cond_signal(pConditionVariable);
+	if(res == EINVAL) return FR_ERROR_INVALID_ARGUMENT;
+	if(res != 0) return FR_ERROR_UNKNOWN;
+
+#endif
+
+	return FR_SUCCESS;
+}
+
+FrResult frBroadcastConditionVariable(FrConditionVariable* pConditionVariable) // TODO
+{
+#ifdef _WIN32
+
+	WakeAllConditionVariable(pConditionVariable);
+
+#else
+
+	int res = pthread_cond_broadcast(pConditionVariable);
+	if(res == EINVAL) return FR_ERROR_INVALID_ARGUMENT;
+	if(res != 0) return FR_ERROR_UNKNOWN;
+
+#endif
+
+	return FR_SUCCESS;
+}
+
+FrResult frDestroyConditionVariable(FrConditionVariable* pConditionVariable)
+{
+#ifndef _WIN32
+
+	int res = pthread_cond_destroy(pConditionVariable);
+
+	if(res == EINVAL) return FR_ERROR_INVALID_ARGUMENT;
 	if(res != 0) return FR_ERROR_UNKNOWN;
 
 #endif

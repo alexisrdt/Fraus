@@ -52,17 +52,24 @@ typedef enum FrMouseButton
 } FrMouseButton;
 
 // Handlers
-typedef void(*FrMouseMoveHandler)(uint16_t x, uint16_t y);
-typedef void(*FrClickHandler)(FrMouseButton button);
-typedef void(*FrKeyHandler)(FrKey key);
-typedef void(*FrResizeHandler)(uint16_t newWidth, uint16_t newHeight);
+typedef void(*FrMouseMoveHandler)(uint16_t x, uint16_t y, void* pUserData);
+typedef void(*FrClickHandler)(FrMouseButton button, void* pUserData);
+typedef void(*FrKeyHandler)(FrKey key, void* pUserData);
+typedef void(*FrResizeHandler)(uint16_t newWidth, uint16_t newHeight, void* pUserData);
 
 typedef struct FrEventHandlers
 {
 	FrMouseMoveHandler mouseMoveHandler;
+	void* pMouseMoveHandlerUserData;
+
 	FrClickHandler clickHandler;
+	void* pClickHandlerUserData;
+
 	FrKeyHandler keyHandler;
+	void* pKeyHandlerUserData;
+
 	FrResizeHandler resizeHandler;
+	void* pResizeHandlerUserData;
 } FrEventHandlers;
 
 // Window type
@@ -89,27 +96,27 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow);
  * - pWindow: pointer to the window
  * - handler: the handler
  */
-void frSetMouseMoveHandler(FrWindow* pWindow, FrMouseMoveHandler handler);
+void frSetMouseMoveHandler(FrWindow* pWindow, FrMouseMoveHandler handler, void* pUserData);
 
 /*
  * Set the click handler
  * - pWindow: pointer to the window
  * - handler: the handler
  */
-void frSetClickHandler(FrWindow* pWindow, FrClickHandler handler);
+void frSetClickHandler(FrWindow* pWindow, FrClickHandler handler, void* pUserData);
 
 /*
  * Set the key handler
  * - pWindow: pointer to the window
  * - handler: the handler
  */
-void frSetKeyHandler(FrWindow* pWindow, FrKeyHandler handler);
+void frSetKeyHandler(FrWindow* pWindow, FrKeyHandler handler, void* pUserData);
 
 /*
  * Set the resize handler
  * - pWindow: pointer to the window
  * - handler: the handler
  */
-void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler);
+void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler, void* pUserData);
 
 #endif

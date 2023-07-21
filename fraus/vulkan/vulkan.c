@@ -354,6 +354,9 @@ FrResult frCreateSurface(FrWindow* pWindow, FrVulkanData* pVulkanData)
 #endif
 
 	pVulkanData->swapchain = VK_NULL_HANDLE;
+	pVulkanData->pImages = NULL;
+	pVulkanData->pImageViews = NULL;
+	pVulkanData->pFramebuffers = NULL;
 
 	return FR_SUCCESS;
 }
@@ -579,27 +582,36 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 	}
 
 	if(vkGetSwapchainImagesKHR(pVulkanData->device, pVulkanData->swapchain, &pVulkanData->imageCount, NULL) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-	pVulkanData->pImages = malloc(pVulkanData->imageCount * sizeof(VkImage));
-	if(!pVulkanData->pImages) return FR_ERROR_UNKNOWN;
+	VkImage* pNewImages = realloc(pVulkanData->pImages, pVulkanData->imageCount * sizeof(VkImage));
+	if(!pNewImages) return FR_ERROR_UNKNOWN;
+	pVulkanData->pImages = pNewImages;
 	if(vkGetSwapchainImagesKHR(pVulkanData->device, pVulkanData->swapchain, &pVulkanData->imageCount, pVulkanData->pImages) != VK_SUCCESS)
 	{
+		free(pSurfaceFormats);
+		free(pPresentModes);
 		free(pVulkanData->pImages);
+		pVulkanData->pImages = NULL;
 		return FR_ERROR_UNKNOWN;
 	}
 
-	pVulkanData->pImageViews = malloc(pVulkanData->imageCount * sizeof(VkImageView));
-	if(!pVulkanData->pImageViews)
+	free(pSurfaceFormats);
+	free(pPresentModes);
+
+	VkImageView* pNewImageViews = realloc(pVulkanData->pImageViews, pVulkanData->imageCount * sizeof(VkImageView));
+	if(!pNewImageViews)
 	{
 		free(pVulkanData->pImages);
+		pVulkanData->pImages = NULL;
 		return FR_ERROR_UNKNOWN;
 	}
+	pVulkanData->pImageViews = pNewImageViews;
 	for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
 	{
 		VkImageViewCreateInfo imageViewInfo = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 			.image = pVulkanData->pImages[imageIndex],
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = pSurfaceFormats[surfaceFormatIndex].format,
+			.format = pVulkanData->format,
 			.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
 			.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
 			.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -618,23 +630,11 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 			}
 			free(pVulkanData->pImageViews);
 			free(pVulkanData->pImages);
+			pVulkanData->pImageViews = NULL;
+			pVulkanData->pImages = NULL;
 			return FR_ERROR_UNKNOWN;
 		}
 	}
-
-	free(pSurfaceFormats);
-	free(pPresentModes);
-
-	VkSemaphoreCreateInfo semaphoreCreateInfo = {
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
-	};
-	VkFenceCreateInfo fenceCreateInfo = {
-		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-		.flags = VK_FENCE_CREATE_SIGNALED_BIT
-	};
-	if(vkCreateSemaphore(pVulkanData->device, &semaphoreCreateInfo, NULL, &pVulkanData->imageAvailableSemaphore) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-	if(vkCreateSemaphore(pVulkanData->device, &semaphoreCreateInfo, NULL, &pVulkanData->renderFinishedSemaphore) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-	if(vkCreateFence(pVulkanData->device, &fenceCreateInfo, NULL, &pVulkanData->frameInFlightFence) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 #ifndef NDEBUG
 	if(pVulkanData->debugExtensionAvailable)
@@ -662,20 +662,6 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 			nameInfo.pObjectName = pObjectName;
 			if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		}
-
-		nameInfo.objectType = VK_OBJECT_TYPE_SEMAPHORE;
-		nameInfo.objectHandle = (uint64_t)pVulkanData->imageAvailableSemaphore;
-		nameInfo.pObjectName = "Fraus image available semaphore";
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-		nameInfo.objectHandle = (uint64_t)pVulkanData->renderFinishedSemaphore;
-		nameInfo.pObjectName = "Fraus render finished semaphore";
-		if (vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-		nameInfo.objectType = VK_OBJECT_TYPE_FENCE;
-		nameInfo.objectHandle = (uint64_t)pVulkanData->frameInFlightFence;
-		nameInfo.pObjectName = "Fraus frame in flight fence";
-		if (vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -734,8 +720,9 @@ FrResult frCreateRenderPass(FrVulkanData* pVulkanData)
 
 FrResult frCreateFramebuffers(FrVulkanData* pVulkanData)
 {
-	pVulkanData->pFramebuffers = malloc(pVulkanData->imageCount * sizeof(VkFramebuffer));
-	if(!pVulkanData->pFramebuffers) return FR_ERROR_UNKNOWN;
+	VkFramebuffer* pNewFramebuffers = realloc(pVulkanData->pFramebuffers, pVulkanData->imageCount * sizeof(VkFramebuffer));
+	if(!pNewFramebuffers) return FR_ERROR_UNKNOWN;
+	pVulkanData->pFramebuffers = pNewFramebuffers;
 
 	for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
 	{
@@ -756,6 +743,7 @@ FrResult frCreateFramebuffers(FrVulkanData* pVulkanData)
 			}
 
 			free(pVulkanData->pFramebuffers);
+			pVulkanData->pFramebuffers = NULL;
 			return FR_ERROR_UNKNOWN;
 		}
 	}
@@ -824,16 +812,55 @@ FrResult frCreateCommandPool(FrVulkanData* pVulkanData)
 	}
 #endif
 
+	VkSemaphoreCreateInfo semaphoreCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+	};
+	VkFenceCreateInfo fenceCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+		.flags = VK_FENCE_CREATE_SIGNALED_BIT
+	};
+	if(vkCreateSemaphore(pVulkanData->device, &semaphoreCreateInfo, NULL, &pVulkanData->imageAvailableSemaphore) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(vkCreateSemaphore(pVulkanData->device, &semaphoreCreateInfo, NULL, &pVulkanData->renderFinishedSemaphore) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(vkCreateFence(pVulkanData->device, &fenceCreateInfo, NULL, &pVulkanData->frameInFlightFence) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_SEMAPHORE,
+			.objectHandle = (uint64_t)pVulkanData->imageAvailableSemaphore,
+			.pObjectName = "Fraus image available semaphore"
+		};
+		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		nameInfo.objectHandle = (uint64_t)pVulkanData->renderFinishedSemaphore;
+		nameInfo.pObjectName = "Fraus render finished semaphore";
+		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		nameInfo.objectType = VK_OBJECT_TYPE_FENCE;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->frameInFlightFence;
+		nameInfo.pObjectName = "Fraus frame in flight fence";
+		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
 	return FR_SUCCESS;
 }
 
 FrResult frDrawFrame(FrVulkanData* pVulkanData)
 {
 	static uint32_t imageIndex;
+	static VkResult result;
 
 	if(vkWaitForFences(pVulkanData->device, 1, &pVulkanData->frameInFlightFence, VK_TRUE, UINT64_MAX) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
-	if(vkAcquireNextImageKHR(pVulkanData->device, pVulkanData->swapchain, UINT64_MAX, pVulkanData->imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	result = vkAcquireNextImageKHR(pVulkanData->device, pVulkanData->swapchain, UINT64_MAX, pVulkanData->imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+	if(result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		frRecreateSwapchain(pVulkanData);
+		return FR_SUCCESS;
+	}
+	if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) return FR_ERROR_UNKNOWN;
 
 	if(vkResetFences(pVulkanData->device, 1, &pVulkanData->frameInFlightFence) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
@@ -875,7 +902,7 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 	};
 	if(vkQueueSubmit(pVulkanData->queue, 1, &submitInfo, pVulkanData->frameInFlightFence) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
-	VkResult result;
+	VkResult presentResult;
 	VkPresentInfoKHR presentInfo = {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 		.waitSemaphoreCount = 1,
@@ -883,9 +910,34 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 		.swapchainCount = 1,
 		.pSwapchains = &pVulkanData->swapchain,
 		.pImageIndices = &imageIndex,
-		.pResults = &result
+		.pResults = &presentResult
 	};
-	if(vkQueuePresentKHR(pVulkanData->queue, &presentInfo) != VK_SUCCESS || result != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	result = vkQueuePresentKHR(pVulkanData->queue, &presentInfo);
+	if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+	{
+		frRecreateSwapchain(pVulkanData);
+	}
+	else if(result != VK_SUCCESS || presentResult != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	return FR_SUCCESS;
+}
+
+FrResult frRecreateSwapchain(FrVulkanData* pVulkanData)
+{
+	if(vkDeviceWaitIdle(pVulkanData->device) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	VkSwapchainKHR oldSwapchain = pVulkanData->swapchain;
+
+	for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
+	{
+		vkDestroyFramebuffer(pVulkanData->device, pVulkanData->pFramebuffers[imageIndex], NULL);
+		vkDestroyImageView(pVulkanData->device, pVulkanData->pImageViews[imageIndex], NULL);
+	}
+
+	if(frCreateSwapchain(pVulkanData) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(frCreateFramebuffers(pVulkanData) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	vkDestroySwapchainKHR(pVulkanData->device, oldSwapchain, NULL);
 
 	return FR_SUCCESS;
 }

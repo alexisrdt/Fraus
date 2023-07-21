@@ -15,4 +15,6 @@ FrResult frCreateFramebuffers(FrVulkanData* pVulkanData);
 FrResult frCreateCommandPool(FrVulkanData* pVulkanData);
 FrResult frDrawFrame(FrVulkanData* pVulkanData);
 
+FrResult frRecreateSwapchain(FrVulkanData* pVulkanData);
+
 #endif

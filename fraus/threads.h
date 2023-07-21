@@ -26,6 +26,7 @@ typedef int(*FrThreadProc)(void*);
 
 typedef HANDLE FrThread;
 typedef CRITICAL_SECTION FrMutex;
+typedef CONDITION_VARIABLE FrConditionVariable;
 
 #else
 
@@ -33,6 +34,7 @@ typedef CRITICAL_SECTION FrMutex;
 
 typedef pthread_t FrThread;
 typedef pthread_mutex_t FrMutex;
+typedef pthread_cond_t FrConditionVariable;
 
 #endif
 
@@ -40,16 +42,24 @@ typedef pthread_mutex_t FrMutex;
 
 /* Thread */
 
-FrResult frGetNumberOfLogicalCores(uint32_t* pCount);
+uint32_t frGetNumberOfLogicalCores();
 
 FrResult frCreateThread(FrThread* pThread, FrThreadProc proc, void* pArg);
 FrResult frJoinThread(FrThread thread, int* pReturnValue);
 
 /* Mutex */
 
-FrResult frCreateMutex(FrMutex* pMutex);
+FrResult frInitializeMutex(FrMutex* pMutex);
 FrResult frLockMutex(FrMutex* pMutex);
 FrResult frUnlockMutex(FrMutex* pMutex);
 FrResult frDestroyMutex(FrMutex* pMutex);
+
+/* Condition variable */
+
+FrResult frInitializeConditionVariable(FrConditionVariable* pConditionVariable);
+FrResult frWaitConditionVariable(FrConditionVariable* pConditionVariable, FrMutex* pMutex);
+FrResult frSignalConditionVariable(FrConditionVariable* pConditionVariable);
+FrResult frBroadcastConditionVariable(FrConditionVariable* pConditionVariable);
+FrResult frDestroyConditionVariable(FrConditionVariable* pConditionVariable);
 
 #endif

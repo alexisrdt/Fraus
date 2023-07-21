@@ -1,5 +1,6 @@
 #include "window.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -63,23 +64,23 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 	switch(message)
 	{
 		case WM_MOUSEMOVE:
-			if(pWindow->handlers.mouseMoveHandler) pWindow->handlers.mouseMoveHandler(LOWORD(lParam), HIWORD(lParam));
+			if(pWindow->handlers.mouseMoveHandler) pWindow->handlers.mouseMoveHandler(LOWORD(lParam), HIWORD(lParam), pWindow->handlers.pMouseMoveHandlerUserData);
 			break;
 
 		case WM_LBUTTONDOWN:
-			if(pWindow->handlers.clickHandler) pWindow->handlers.clickHandler(FR_MOUSE_LEFT);
+			if(pWindow->handlers.clickHandler) pWindow->handlers.clickHandler(FR_MOUSE_LEFT, pWindow->handlers.pClickHandlerUserData);
 			break;
 
 		case WM_RBUTTONDOWN:
-			if(pWindow->handlers.clickHandler) pWindow->handlers.clickHandler(FR_MOUSE_RIGHT);
+			if(pWindow->handlers.clickHandler) pWindow->handlers.clickHandler(FR_MOUSE_RIGHT, pWindow->handlers.pClickHandlerUserData);
 			break;
 
 		case WM_KEYDOWN:
-			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam));
+			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam), pWindow->handlers.pKeyHandlerUserData);
 			break;
 
 		case WM_SIZE:
-			if(pWindow->handlers.resizeHandler) pWindow->handlers.resizeHandler(LOWORD(lParam), HIWORD(lParam));
+			if(pWindow->handlers.resizeHandler) pWindow->handlers.resizeHandler(LOWORD(lParam), HIWORD(lParam), pWindow->handlers.pResizeHandlerUserData);
 			break;
 
 		case WM_CLOSE:
@@ -165,9 +166,10 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
  * - pWindow: pointer to the window
  * - handler: the handler
  */
-void frSetMouseMoveHandler(FrWindow* pWindow, FrMouseMoveHandler handler)
+void frSetMouseMoveHandler(FrWindow* pWindow, FrMouseMoveHandler handler, void* pUserData)
 {
 	pWindow->handlers.mouseMoveHandler = handler;
+	pWindow->handlers.pMouseMoveHandlerUserData = pUserData;
 }
 
 /*
@@ -175,9 +177,10 @@ void frSetMouseMoveHandler(FrWindow* pWindow, FrMouseMoveHandler handler)
  * - pWindow: pointer to the window
  * - handler: the handler
  */
-void frSetClickHandler(FrWindow* pWindow, FrClickHandler handler)
+void frSetClickHandler(FrWindow* pWindow, FrClickHandler handler, void* pUserData)
 {
 	pWindow->handlers.clickHandler = handler;
+	pWindow->handlers.pClickHandlerUserData = pUserData;
 }
 
 /*
@@ -185,9 +188,10 @@ void frSetClickHandler(FrWindow* pWindow, FrClickHandler handler)
  * - pWindow: pointer to the window
  * - handler: the handler
  */
-void frSetKeyHandler(FrWindow* pWindow, FrKeyHandler handler)
+void frSetKeyHandler(FrWindow* pWindow, FrKeyHandler handler, void* pUserData)
 {
 	pWindow->handlers.keyHandler = handler;
+	pWindow->handlers.pKeyHandlerUserData = pUserData;
 }
 
 /*
@@ -195,7 +199,8 @@ void frSetKeyHandler(FrWindow* pWindow, FrKeyHandler handler)
  * - pWindow: pointer to the window
  * - handler: the handler
  */
-void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler)
+void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler, void* pUserData)
 {
 	pWindow->handlers.resizeHandler = handler;
+	pWindow->handlers.pResizeHandlerUserData = pUserData;
 }
