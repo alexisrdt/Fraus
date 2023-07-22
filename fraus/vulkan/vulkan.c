@@ -464,15 +464,19 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateCommandPool)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyCommandPool)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkAllocateCommandBuffers)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkFreeCommandBuffers)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkResetCommandBuffer)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkResetCommandPool)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkAcquireNextImageKHR)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkQueuePresentKHR)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkQueueSubmit)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkQueueWaitIdle)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkBeginCommandBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkEndCommandBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBeginRenderPass)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdEndRenderPass)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindPipeline)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdCopyBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindVertexBuffers)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdSetViewport)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdSetScissor)
@@ -714,12 +718,23 @@ FrResult frCreateRenderPass(FrVulkanData* pVulkanData)
 		.pColorAttachments = &attachmentReference
 	};
 
+	VkSubpassDependency dependency = {
+		.srcSubpass = VK_SUBPASS_EXTERNAL,
+		.dstSubpass = 0,
+		.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+		.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+		.srcAccessMask = 0,
+		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+	};
+
 	VkRenderPassCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 		.attachmentCount = 1,
 		.pAttachments = &attachment,
 		.subpassCount = 1,
-		.pSubpasses = &subpass
+		.pSubpasses = &subpass,
+		.dependencyCount = 1,
+		.pDependencies = &dependency
 	};
 
 	if(vkCreateRenderPass(pVulkanData->device, &createInfo, NULL, &pVulkanData->renderPass) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
@@ -1013,24 +1028,21 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 	return FR_SUCCESS;
 }
 
-FrResult frCreateVertexBuffer(FrVulkanData* pVulkanData, FrVertex* pVertices, uint32_t vertexCount)
+static FrResult frCreateBuffer(FrVulkanData* pVulkanData, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* pBuffer, VkDeviceMemory* pBufferMemory)
 {
-	VkDeviceSize size = vertexCount * sizeof(FrVertex);
-
+	// Create buffer
 	VkBufferCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 		.size = size,
-		.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		.usage = usage,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
 	};
 
-	if(vkCreateBuffer(pVulkanData->device, &createInfo, NULL, &pVulkanData->vertexBuffer) != VK_SUCCESS)
-	{
-		return FR_ERROR_UNKNOWN;
-	}
+	if(vkCreateBuffer(pVulkanData->device, &createInfo, NULL, pBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
+	// Memory allocation
 	VkMemoryRequirements memoryRequirements;
-	vkGetBufferMemoryRequirements(pVulkanData->device, pVulkanData->vertexBuffer, &memoryRequirements);
+	vkGetBufferMemoryRequirements(pVulkanData->device, *pBuffer, &memoryRequirements);
 
 	VkPhysicalDeviceMemoryProperties memoryProperties;
 	vkGetPhysicalDeviceMemoryProperties(pVulkanData->physicalDevice, &memoryProperties);
@@ -1040,10 +1052,14 @@ FrResult frCreateVertexBuffer(FrVulkanData* pVulkanData, FrVertex* pVertices, ui
 	{
 		if(
 			(memoryRequirements.memoryTypeBits & (1 << memoryTypeIndex)) &&
-			(memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+			(memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & properties) == properties
 		) break;
 	}
-	if(memoryTypeIndex >= memoryProperties.memoryTypeCount) return FR_ERROR_UNKNOWN;
+	if(memoryTypeIndex >= memoryProperties.memoryTypeCount)
+	{
+		vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
 
 	VkMemoryAllocateInfo allocateInfo = {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -1051,23 +1067,133 @@ FrResult frCreateVertexBuffer(FrVulkanData* pVulkanData, FrVertex* pVertices, ui
 		.memoryTypeIndex = memoryTypeIndex
 	};
 
-	if(vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, &pVulkanData->vertexBufferMemory) != VK_SUCCESS)
+	if(vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, pBufferMemory) != VK_SUCCESS)
 	{
+		vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
-	if(vkBindBufferMemory(pVulkanData->device, pVulkanData->vertexBuffer, pVulkanData->vertexBufferMemory, 0) != VK_SUCCESS)
+	if(vkBindBufferMemory(pVulkanData->device, *pBuffer, *pBufferMemory, 0) != VK_SUCCESS)
 	{
+		vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, *pBufferMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
+	return FR_SUCCESS;
+}
+
+static FrResult frCopyBuffer(FrVulkanData* pVulkanData, VkBuffer sourceBuffer, VkBuffer destinationBuffer, VkDeviceSize size)
+{
+	// Create command buffer
+	VkCommandBufferAllocateInfo allocateInfo = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = pVulkanData->commandPool,
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1
+	};
+	VkCommandBuffer commandBuffer;
+	if(vkAllocateCommandBuffers(pVulkanData->device, &allocateInfo, &commandBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	// Begin command buffer
+	VkCommandBufferBeginInfo beginInfo = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+	};
+	if(vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
+	{
+		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
+		return EXIT_FAILURE;
+	}
+
+	// Copy buffer
+	VkBufferCopy region = {
+		.size = size
+	};
+	vkCmdCopyBuffer(commandBuffer, sourceBuffer, destinationBuffer, 1, &region);
+
+	// End command buffer
+	if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+	{
+		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Submit to queue
+	VkSubmitInfo submitInfo = {
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &commandBuffer
+	};
+	if(vkQueueSubmit(pVulkanData->queue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+	{
+		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Wait idle
+	if(vkQueueWaitIdle(pVulkanData->queue) != VK_SUCCESS)
+	{
+		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Free command buffer
+	vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
+
+	return FR_SUCCESS;
+}
+
+FrResult frCreateVertexBuffer(FrVulkanData* pVulkanData, FrVertex* pVertices, uint32_t vertexCount)
+{
+	// Compute size
+	VkDeviceSize size = vertexCount * sizeof(FrVertex);
+
+	// Create staging buffer
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+
+	if(frCreateBuffer(
+		pVulkanData,
+		size,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		&stagingBuffer,
+		&stagingBufferMemory
+	) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	// Upload data to GPU
 	void* pData;
-	if(vkMapMemory(pVulkanData->device, pVulkanData->vertexBufferMemory, 0, size, 0, &pData) != VK_SUCCESS)
+	if(vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData) != VK_SUCCESS)
 	{
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 	memcpy(pData, pVertices, size);
-	vkUnmapMemory(pVulkanData->device, pVulkanData->vertexBufferMemory);
+	vkUnmapMemory(pVulkanData->device, stagingBufferMemory);
+
+	// Create vertex buffer
+	if(frCreateBuffer(
+		pVulkanData,
+		size,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		&pVulkanData->vertexBuffer,
+		&pVulkanData->vertexBufferMemory
+	) != FR_SUCCESS)
+	{
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Copy data to vertex buffer
+	frCopyBuffer(pVulkanData, stagingBuffer, pVulkanData->vertexBuffer, size);
+
+	// Destroy staging buffer
+	vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+	vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 
 	return FR_SUCCESS;
 }
@@ -1076,7 +1202,6 @@ FrResult frCreateCommandPool(FrVulkanData* pVulkanData)
 {
 	VkCommandPoolCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 		.queueFamilyIndex = pVulkanData->queueFamily
 	};
 	if(vkCreateCommandPool(pVulkanData->device, &createInfo, NULL, &pVulkanData->commandPool) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
@@ -1167,10 +1292,11 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 
 	if(vkResetFences(pVulkanData->device, 1, &pVulkanData->frameInFlightFence) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
-	if(vkResetCommandBuffer(pVulkanData->commandBuffer, 0) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(vkResetCommandPool(pVulkanData->device, pVulkanData->commandPool, 0) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	VkCommandBufferBeginInfo beginInfo = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
 	};
 	if(vkBeginCommandBuffer(pVulkanData->commandBuffer, &beginInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
