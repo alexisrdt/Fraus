@@ -18,7 +18,7 @@
  * Thread procedure
  * Chose to return int instead of void* as pthread does to match main function behaviour
  */
-typedef int(*FrThreadProc)(void*);
+typedef int(*FrThreadProc)(void* pData);
 
 #ifdef _WIN32
 

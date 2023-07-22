@@ -12,6 +12,9 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData);
 FrResult frCreateSwapchain(FrVulkanData* pVulkanData);
 FrResult frCreateRenderPass(FrVulkanData* pVulkanData);
 FrResult frCreateFramebuffers(FrVulkanData* pVulkanData);
+FrResult frCreateShaderModule(FrVulkanData* pVulkanData, const char* pPath, VkShaderModule* pShaderModule);
+FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData);
+FrResult frCreateVertexBuffer(FrVulkanData* pVulkanData, FrVertex* pVertices, uint32_t vertexCount);
 FrResult frCreateCommandPool(FrVulkanData* pVulkanData);
 FrResult frDrawFrame(FrVulkanData* pVulkanData);
 

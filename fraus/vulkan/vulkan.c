@@ -269,6 +269,7 @@ FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVu
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkDestroySurfaceKHR)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkEnumeratePhysicalDevices)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceQueueFamilyProperties)
+	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceMemoryProperties)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceSurfaceFormatsKHR)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceSurfacePresentModesKHR)
@@ -438,6 +439,22 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyFramebuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateRenderPass)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyRenderPass)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateDescriptorSetLayout)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyDescriptorSetLayout)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateShaderModule)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyShaderModule)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreatePipelineLayout)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyPipelineLayout)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateGraphicsPipelines)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyPipeline)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateBuffer)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyBuffer)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkGetBufferMemoryRequirements)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkAllocateMemory)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkFreeMemory)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkBindBufferMemory)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkMapMemory)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkUnmapMemory)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateSemaphore)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroySemaphore)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateFence)
@@ -455,6 +472,11 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkEndCommandBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBeginRenderPass)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdEndRenderPass)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindPipeline)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindVertexBuffers)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdSetViewport)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdSetScissor)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdDraw)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDeviceWaitIdle)
 
 	vkGetDeviceQueue(pVulkanData->device, pVulkanData->queueFamily, 0, &pVulkanData->queue);
@@ -769,6 +791,287 @@ FrResult frCreateFramebuffers(FrVulkanData* pVulkanData)
 	return FR_SUCCESS;
 }
 
+FrResult frCreateShaderModule(FrVulkanData* pVulkanData, const char* pPath, VkShaderModule* pShaderModule)
+{
+	VkShaderModuleCreateInfo createInfo = {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO
+	};
+
+	FILE* file = fopen(pPath, "rb");
+	if(!file) return FR_ERROR_FILE_NOT_FOUND;
+	
+	fseek(file, 0, SEEK_END);
+	createInfo.codeSize = ftell(file);
+	if(createInfo.codeSize % sizeof(uint32_t) != 0)
+	{
+		fclose(file);
+		return FR_ERROR_CORRUPTED_FILE;
+	}
+
+	uint32_t* pCode = malloc(createInfo.codeSize);
+	if(!pCode)
+	{
+		fclose(file);
+		return FR_ERROR_OUT_OF_MEMORY;
+	}
+
+	fseek(file, 0, SEEK_SET);
+	if(fread(pCode, sizeof(uint32_t), createInfo.codeSize / sizeof(uint32_t), file) != createInfo.codeSize / sizeof(uint32_t))
+	{
+		free(pCode);
+		fclose(file);
+		return FR_ERROR_UNKNOWN;
+	}
+	createInfo.pCode = pCode;
+
+	fclose(file);
+	
+	if(vkCreateShaderModule(pVulkanData->device, &createInfo, NULL, pShaderModule) != VK_SUCCESS)
+	{
+		free(pCode);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	free(pCode);
+
+	return FR_SUCCESS;
+}
+
+FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
+{
+	// Shader stages
+	VkShaderModule vertexModule, fragmentModule;
+	if(frCreateShaderModule(pVulkanData, "vert.spv", &vertexModule) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(frCreateShaderModule(pVulkanData, "frag.spv", &fragmentModule) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	VkPipelineShaderStageCreateInfo stageInfos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_VERTEX_BIT,
+			.module = vertexModule,
+			.pName = "main",
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+			.module = fragmentModule,
+			.pName = "main",
+		}
+	};
+
+	// Vertex input
+	VkVertexInputBindingDescription binding = {
+		.binding = 0,
+		.stride = 6 * sizeof(float),
+		.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+	};
+
+	VkVertexInputAttributeDescription attributes[] = {
+		{
+			.binding = 0,
+			.location = 0,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = 0
+		},
+		{
+			.binding = 0,
+			.location = 1,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = 3 * sizeof(float)
+		},
+	};
+
+	VkPipelineVertexInputStateCreateInfo vertexInput = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		.vertexBindingDescriptionCount = 1,
+		.pVertexBindingDescriptions = &binding,
+		.vertexAttributeDescriptionCount = sizeof(attributes) / sizeof(VkVertexInputAttributeDescription),
+		.pVertexAttributeDescriptions = attributes
+	};
+
+	// Input assembly
+	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+		.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+		.primitiveRestartEnable = VK_FALSE
+	};
+
+	// Tessellation
+	VkPipelineTessellationStateCreateInfo tessellation = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+		.patchControlPoints = 1
+	};
+
+	// Viewport
+	VkPipelineViewportStateCreateInfo viewport = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+		.viewportCount = 1,
+		.scissorCount = 1
+	};
+
+	// Rasterization
+	VkPipelineRasterizationStateCreateInfo rasterization = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		.depthClampEnable = VK_FALSE,
+		.rasterizerDiscardEnable = VK_FALSE,
+		.polygonMode = VK_POLYGON_MODE_FILL,
+		.cullMode = VK_CULL_MODE_BACK_BIT,
+		.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+		.depthBiasEnable = VK_FALSE,
+		.lineWidth = 1.f
+	};
+
+	// Multisample
+	VkPipelineMultisampleStateCreateInfo multisample = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+		.rasterizationSamples = 1,
+		.sampleShadingEnable = VK_FALSE
+	};
+
+	// Depth stencil
+	VkPipelineDepthStencilStateCreateInfo depthStencil = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+		.depthTestEnable = VK_TRUE,
+		.depthWriteEnable = VK_TRUE,
+		.depthCompareOp = VK_COMPARE_OP_LESS,
+		.depthBoundsTestEnable = VK_FALSE,
+		.stencilTestEnable = VK_FALSE
+	};
+
+	// Color blend
+	VkPipelineColorBlendAttachmentState colorAttachment = {
+		.blendEnable = VK_FALSE,
+		.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_A_BIT
+	};
+
+	VkPipelineColorBlendStateCreateInfo colorBlend = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		.logicOpEnable = VK_FALSE,
+		.attachmentCount = 1,
+		.pAttachments = &colorAttachment
+	};
+
+	// Dynamic
+	VkDynamicState dynamics[] = {VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_VIEWPORT};
+
+	VkPipelineDynamicStateCreateInfo dynamic = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+		.dynamicStateCount = sizeof(dynamics) / sizeof(VkDynamicState),
+		.pDynamicStates = dynamics
+	};
+
+	// Descriptor set
+	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.bindingCount = 0,
+		.pBindings = NULL
+	};
+	if(vkCreateDescriptorSetLayout(pVulkanData->device, &descriptorSetLayoutInfo, NULL, &pVulkanData->descriptorSetLayout) != VK_SUCCESS)
+	{
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Layout
+	VkPipelineLayoutCreateInfo layoutInfo = {
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+		.setLayoutCount = 1,
+		.pSetLayouts = &pVulkanData->descriptorSetLayout
+	};
+
+	if(vkCreatePipelineLayout(pVulkanData->device, &layoutInfo, NULL, &pVulkanData->pipelineLayout) != VK_SUCCESS)
+	{
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Pipeline
+	VkGraphicsPipelineCreateInfo createInfo = {
+		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+		.stageCount = sizeof(stageInfos) / sizeof(VkPipelineShaderStageCreateInfo),
+		.pStages = stageInfos,
+		.pVertexInputState = &vertexInput,
+		.pInputAssemblyState = &inputAssembly,
+		.pTessellationState = &tessellation,
+		.pViewportState = &viewport,
+		.pRasterizationState = &rasterization,
+		.pMultisampleState = &multisample,
+		.pDepthStencilState = &depthStencil,
+		.pColorBlendState = &colorBlend,
+		.pDynamicState = &dynamic,
+		.layout = pVulkanData->pipelineLayout,
+		.renderPass = pVulkanData->renderPass,
+		.subpass = 0
+	};
+
+	if(vkCreateGraphicsPipelines(pVulkanData->device, VK_NULL_HANDLE, 1, &createInfo, NULL, &pVulkanData->graphicsPipeline) != VK_SUCCESS)
+	{
+		return FR_ERROR_UNKNOWN;
+	}
+
+	vkDestroyShaderModule(pVulkanData->device, vertexModule, NULL);
+	vkDestroyShaderModule(pVulkanData->device, fragmentModule, NULL);
+
+	return FR_SUCCESS;
+}
+
+FrResult frCreateVertexBuffer(FrVulkanData* pVulkanData, FrVertex* pVertices, uint32_t vertexCount)
+{
+	VkDeviceSize size = vertexCount * sizeof(FrVertex);
+
+	VkBufferCreateInfo createInfo = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.size = size,
+		.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
+	};
+
+	if(vkCreateBuffer(pVulkanData->device, &createInfo, NULL, &pVulkanData->vertexBuffer) != VK_SUCCESS)
+	{
+		return FR_ERROR_UNKNOWN;
+	}
+
+	VkMemoryRequirements memoryRequirements;
+	vkGetBufferMemoryRequirements(pVulkanData->device, pVulkanData->vertexBuffer, &memoryRequirements);
+
+	VkPhysicalDeviceMemoryProperties memoryProperties;
+	vkGetPhysicalDeviceMemoryProperties(pVulkanData->physicalDevice, &memoryProperties);
+
+	uint32_t memoryTypeIndex;
+	for(memoryTypeIndex = 0; memoryTypeIndex < memoryProperties.memoryTypeCount; ++memoryTypeIndex)
+	{
+		if(
+			(memoryRequirements.memoryTypeBits & (1 << memoryTypeIndex)) &&
+			(memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+		) break;
+	}
+	if(memoryTypeIndex >= memoryProperties.memoryTypeCount) return FR_ERROR_UNKNOWN;
+
+	VkMemoryAllocateInfo allocateInfo = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = memoryRequirements.size,
+		.memoryTypeIndex = memoryTypeIndex
+	};
+
+	if(vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, &pVulkanData->vertexBufferMemory) != VK_SUCCESS)
+	{
+		return FR_ERROR_UNKNOWN;
+	}
+
+	if(vkBindBufferMemory(pVulkanData->device, pVulkanData->vertexBuffer, pVulkanData->vertexBufferMemory, 0) != VK_SUCCESS)
+	{
+		return FR_ERROR_UNKNOWN;
+	}
+
+	void* pData;
+	if(vkMapMemory(pVulkanData->device, pVulkanData->vertexBufferMemory, 0, size, 0, &pData) != VK_SUCCESS)
+	{
+		return FR_ERROR_UNKNOWN;
+	}
+	memcpy(pData, pVertices, size);
+	vkUnmapMemory(pVulkanData->device, pVulkanData->vertexBufferMemory);
+
+	return FR_SUCCESS;
+}
+
 FrResult frCreateCommandPool(FrVulkanData* pVulkanData)
 {
 	VkCommandPoolCreateInfo createInfo = {
@@ -884,6 +1187,30 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 		.pClearValues = &clearColor
 	};
 	vkCmdBeginRenderPass(pVulkanData->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+
+	vkCmdBindPipeline(pVulkanData->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pVulkanData->graphicsPipeline);
+
+	VkBuffer vertexBuffers[] = {pVulkanData->vertexBuffer};
+	VkDeviceSize offsets[] = {0};
+	vkCmdBindVertexBuffers(pVulkanData->commandBuffer, 0, 1, vertexBuffers, offsets);
+
+	VkViewport viewport = {
+		.x = 0.f,
+		.y = 0.f,
+		.width = (float)pVulkanData->extent.width,
+		.height = (float)pVulkanData->extent.height,
+		.minDepth = 0.f,
+		.maxDepth = 1.f
+	};
+	vkCmdSetViewport(pVulkanData->commandBuffer, 0, 1, &viewport);
+
+	VkRect2D scissor = {
+		.offset = {0, 0},
+		.extent = pVulkanData->extent
+	};
+	vkCmdSetScissor(pVulkanData->commandBuffer, 0, 1, &scissor);
+
+	vkCmdDraw(pVulkanData->commandBuffer, 3, 1, 0, 0);
 
 	vkCmdEndRenderPass(pVulkanData->commandBuffer);
 

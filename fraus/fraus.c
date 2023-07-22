@@ -42,7 +42,7 @@ FrResult frFinish()
 
 /*
  * Main loop of the program
- * - pReturnValue: pointer to a handle for the return value (can be NULL)
+ * - pVulkanData: pointer to a the Vulkan Data
  */
 int frMainLoop(FrVulkanData* pVulkanData)
 {
