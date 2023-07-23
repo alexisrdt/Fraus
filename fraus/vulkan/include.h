@@ -11,12 +11,8 @@
 
 #include <vulkan/vulkan.h>
 
-typedef struct FrVec3
-{
-	float x;
-	float y;
-	float z;
-} FrVec3;
+#include "../math.h"
+#include "../window.h"
 
 typedef struct FrVertex
 {
@@ -31,6 +27,7 @@ typedef struct FrVulkanData
 	bool debugExtensionAvailable;
 	VkDebugUtilsMessengerEXT messenger;
 #endif
+	FrWindow window;
 	VkSurfaceKHR surface;
 	VkPhysicalDevice physicalDevice;
 	uint32_t queueFamily;
@@ -47,8 +44,12 @@ typedef struct FrVulkanData
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;
+	uint32_t vertexCount;
 	VkBuffer vertexBuffer;
 	VkDeviceMemory vertexBufferMemory;
+	uint32_t indexCount;
+	VkBuffer indexBuffer;
+	VkDeviceMemory indexBufferMemory;
 	VkCommandPool commandPool;
 	VkCommandBuffer commandBuffer;
 	VkSemaphore imageAvailableSemaphore;

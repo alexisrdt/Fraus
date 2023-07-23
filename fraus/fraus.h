@@ -6,6 +6,7 @@
 #endif
 
 #include "images/images.h"
+#include "math.h"
 #include "threads.h"
 #include "utils.h"
 #include "vulkan/vulkan.h"

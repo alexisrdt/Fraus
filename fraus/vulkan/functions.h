@@ -100,9 +100,11 @@ FR_DECLARE_PFN(vkCmdEndRenderPass)
 FR_DECLARE_PFN(vkCmdBindPipeline)
 FR_DECLARE_PFN(vkCmdCopyBuffer)
 FR_DECLARE_PFN(vkCmdBindVertexBuffers)
+FR_DECLARE_PFN(vkCmdBindIndexBuffer)
 FR_DECLARE_PFN(vkCmdSetViewport)
 FR_DECLARE_PFN(vkCmdSetScissor)
 FR_DECLARE_PFN(vkCmdDraw)
+FR_DECLARE_PFN(vkCmdDrawIndexed)
 FR_DECLARE_PFN(vkDeviceWaitIdle)
 
 #endif

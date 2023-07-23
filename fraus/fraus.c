@@ -49,6 +49,7 @@ int frMainLoop(FrVulkanData* pVulkanData)
 #ifdef _WIN32
 
 	int returnValue;
+	RECT clientRect;
 	MSG message;
 	while(true)
 	{
@@ -69,7 +70,20 @@ int frMainLoop(FrVulkanData* pVulkanData)
 		}
 
 		// Render
-		if(pVulkanData->extent.width > 0 && pVulkanData->extent.height > 0)
+		if(pVulkanData->window.resized)
+		{
+			GetClientRect(pVulkanData->window.handle, &clientRect);
+			if(clientRect.right > 0 && clientRect.bottom > 0)
+			{
+				frRecreateSwapchain(pVulkanData);
+				if(frDrawFrame(pVulkanData) != FR_SUCCESS)
+				{
+					returnValue = EXIT_FAILURE;
+					break;
+				}
+			}
+		}
+		else
 		{
 			if(frDrawFrame(pVulkanData) != FR_SUCCESS)
 			{

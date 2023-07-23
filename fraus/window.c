@@ -80,6 +80,7 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 			break;
 
 		case WM_SIZE:
+			pWindow->resized = true;
 			if(pWindow->handlers.resizeHandler) pWindow->handlers.resizeHandler(LOWORD(lParam), HIWORD(lParam), pWindow->handlers.pResizeHandlerUserData);
 			break;
 
@@ -154,6 +155,7 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
 
 	// Show window
 	ShowWindow(pWindow->handle, SW_SHOW);
+	pWindow->resized = false;
 #endif
 
 	return FR_SUCCESS;

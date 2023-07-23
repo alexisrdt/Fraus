@@ -1,6 +1,7 @@
 #ifndef FRAUS_WINDOW_H
 #define FRAUS_WINDOW_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <wchar.h>
 
@@ -79,6 +80,7 @@ typedef struct FrWindow
 	HWND handle;
 #endif
 	FrEventHandlers handlers;
+	bool resized;
 
 } FrWindow;
 

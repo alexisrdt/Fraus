@@ -343,13 +343,13 @@ FrResult frChoosePhysicalDevice(FrVulkanData* pVulkanData)
 	return FR_ERROR_UNKNOWN;
 }
 
-FrResult frCreateSurface(FrWindow* pWindow, FrVulkanData* pVulkanData)
+FrResult frCreateSurface(FrVulkanData* pVulkanData)
 {
 #ifdef _WIN32
 	VkWin32SurfaceCreateInfoKHR createInfo = {
 		.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
 		.hinstance = GetModuleHandle(NULL),
-		.hwnd = pWindow->handle
+		.hwnd = pVulkanData->window.handle
 	};
 	if(vkCreateWin32SurfaceKHR(pVulkanData->instance, &createInfo, NULL, &pVulkanData->surface) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 #endif
@@ -478,9 +478,11 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindPipeline)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdCopyBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindVertexBuffers)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindIndexBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdSetViewport)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdSetScissor)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdDraw)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdDrawIndexed)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDeviceWaitIdle)
 
 	vkGetDeviceQueue(pVulkanData->device, pVulkanData->queueFamily, 0, &pVulkanData->queue);
@@ -1162,7 +1164,7 @@ FrResult frCreateVertexBuffer(FrVulkanData* pVulkanData, FrVertex* pVertices, ui
 		&stagingBufferMemory
 	) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
-	// Upload data to GPU
+	// Upload data to device
 	void* pData;
 	if(vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData) != VK_SUCCESS)
 	{
@@ -1190,6 +1192,62 @@ FrResult frCreateVertexBuffer(FrVulkanData* pVulkanData, FrVertex* pVertices, ui
 
 	// Copy data to vertex buffer
 	frCopyBuffer(pVulkanData, stagingBuffer, pVulkanData->vertexBuffer, size);
+	pVulkanData->vertexCount = vertexCount;
+
+	// Destroy staging buffer
+	vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+	vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+
+	return FR_SUCCESS;
+}
+
+FrResult frCreateIndexBuffer(FrVulkanData* pVulkanData, uint32_t* pIndexes, uint32_t indexCount)
+{
+	// Compute size
+	VkDeviceSize size = indexCount * sizeof(uint32_t);
+
+	// Create staging buffer
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+
+	if(frCreateBuffer(
+		pVulkanData,
+		size,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		&stagingBuffer,
+		&stagingBufferMemory
+	) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	// Upload data to device
+	void* pData;
+	if(vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData) != VK_SUCCESS)
+	{
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+	memcpy(pData, pIndexes, size);
+	vkUnmapMemory(pVulkanData->device, stagingBufferMemory);
+
+	// Create index buffer
+	if(frCreateBuffer(
+		pVulkanData,
+		size,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		&pVulkanData->indexBuffer,
+		&pVulkanData->indexBufferMemory
+	) != FR_SUCCESS)
+	{
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Copy data to vertex buffer
+	frCopyBuffer(pVulkanData, stagingBuffer, pVulkanData->indexBuffer, size);
+	pVulkanData->indexCount = indexCount;
 
 	// Destroy staging buffer
 	vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
@@ -1278,17 +1336,13 @@ FrResult frCreateCommandPool(FrVulkanData* pVulkanData)
 FrResult frDrawFrame(FrVulkanData* pVulkanData)
 {
 	static uint32_t imageIndex;
-	static VkResult result;
 
 	if(vkWaitForFences(pVulkanData->device, 1, &pVulkanData->frameInFlightFence, VK_TRUE, UINT64_MAX) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
-	result = vkAcquireNextImageKHR(pVulkanData->device, pVulkanData->swapchain, UINT64_MAX, pVulkanData->imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
-	if(result == VK_ERROR_OUT_OF_DATE_KHR)
+	if(vkAcquireNextImageKHR(pVulkanData->device, pVulkanData->swapchain, UINT64_MAX, pVulkanData->imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex) != VK_SUCCESS)
 	{
-		frRecreateSwapchain(pVulkanData);
-		return FR_SUCCESS;
+		return FR_ERROR_UNKNOWN;
 	}
-	if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) return FR_ERROR_UNKNOWN;
 
 	if(vkResetFences(pVulkanData->device, 1, &pVulkanData->frameInFlightFence) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
@@ -1316,9 +1370,10 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 
 	vkCmdBindPipeline(pVulkanData->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pVulkanData->graphicsPipeline);
 
-	VkBuffer vertexBuffers[] = {pVulkanData->vertexBuffer};
 	VkDeviceSize offsets[] = {0};
-	vkCmdBindVertexBuffers(pVulkanData->commandBuffer, 0, 1, vertexBuffers, offsets);
+	vkCmdBindVertexBuffers(pVulkanData->commandBuffer, 0, 1, &pVulkanData->vertexBuffer, offsets);
+
+	vkCmdBindIndexBuffer(pVulkanData->commandBuffer, pVulkanData->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 	VkViewport viewport = {
 		.x = 0.f,
@@ -1336,7 +1391,8 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 	};
 	vkCmdSetScissor(pVulkanData->commandBuffer, 0, 1, &scissor);
 
-	vkCmdDraw(pVulkanData->commandBuffer, 3, 1, 0, 0);
+	// vkCmdDraw(pVulkanData->commandBuffer, pVulkanData->vertexCount, 1, 0, 0);
+	vkCmdDrawIndexed(pVulkanData->commandBuffer, pVulkanData->indexCount, 1, 0, 0, 0);
 
 	vkCmdEndRenderPass(pVulkanData->commandBuffer);
 
@@ -1365,12 +1421,7 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 		.pImageIndices = &imageIndex,
 		.pResults = &presentResult
 	};
-	result = vkQueuePresentKHR(pVulkanData->queue, &presentInfo);
-	if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-	{
-		frRecreateSwapchain(pVulkanData);
-	}
-	else if(result != VK_SUCCESS || presentResult != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(vkQueuePresentKHR(pVulkanData->queue, &presentInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	return FR_SUCCESS;
 }
@@ -1391,6 +1442,8 @@ FrResult frRecreateSwapchain(FrVulkanData* pVulkanData)
 	if(frCreateFramebuffers(pVulkanData) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	vkDestroySwapchainKHR(pVulkanData->device, oldSwapchain, NULL);
+
+	pVulkanData->window.resized = false;
 
 	return FR_SUCCESS;
 }
