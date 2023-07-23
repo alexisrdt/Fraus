@@ -34,6 +34,29 @@ FrVec3 frSubstract(const FrVec3* pFirst, const FrVec3* pSecond)
 	};
 }
 
+void frZRotation(float matrix[16], float angle)
+{
+	const float c = cosf(angle);
+	const float s = sinf(angle);
+
+	matrix[ 0] =   c;
+	matrix[ 1] =   s;
+	matrix[ 2] = 0.f;
+	matrix[ 3] = 0.f;
+	matrix[ 4] =  -s;
+	matrix[ 5] =   c;
+	matrix[ 6] = 0.f;
+	matrix[ 7] = 0.f;
+	matrix[ 8] = 0.f;
+	matrix[ 9] = 0.f;
+	matrix[10] = 1.f;
+	matrix[11] = 0.f;
+	matrix[12] = 0.f;
+	matrix[13] = 0.f;
+	matrix[14] = 0.f;
+	matrix[15] = 1.f;
+}
+
 void frLookAt(float matrix[16], const FrVec3* pEye, const FrVec3* pObject)
 {
 	const FrVec3 worldUp = {

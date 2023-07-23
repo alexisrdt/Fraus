@@ -20,6 +20,16 @@ typedef struct FrVertex
 	FrVec3 color;
 } FrVertex;
 
+typedef struct FrModelViewProjection
+{
+	float model[16];
+	float view[16];
+	float projection[16];
+} FrModelViewProjection;
+
+typedef struct FrVulkanData FrVulkanData;
+typedef void(*FrUpdateHandler)(FrVulkanData* pVulkanData, float elapsed, void* pUserData);
+
 typedef struct FrVulkanData
 {
 	VkInstance instance;
@@ -50,11 +60,19 @@ typedef struct FrVulkanData
 	uint32_t indexCount;
 	VkBuffer indexBuffer;
 	VkDeviceMemory indexBufferMemory;
+	VkBuffer modelViewProjectionBuffer;
+	VkDeviceMemory modelViewProjectionBufferMemory;
+	void* pModelViewProjectionData;
+	VkDescriptorPool descriptorPool;
+	VkDescriptorSet descriptorSet;
 	VkCommandPool commandPool;
 	VkCommandBuffer commandBuffer;
 	VkSemaphore imageAvailableSemaphore;
 	VkSemaphore renderFinishedSemaphore;
 	VkFence frameInFlightFence;
+
+	FrUpdateHandler updateHandler;
+	void* pUpdateHandlerUserData;
 } FrVulkanData;
 
 #endif

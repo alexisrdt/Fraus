@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "functions.h"
 
@@ -463,6 +464,10 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkResetFences)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateCommandPool)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyCommandPool)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateDescriptorPool)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyDescriptorPool)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkAllocateDescriptorSets)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkUpdateDescriptorSets)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkAllocateCommandBuffers)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkFreeCommandBuffers)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkResetCommandBuffer)
@@ -479,6 +484,7 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdCopyBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindVertexBuffers)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindIndexBuffer)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindDescriptorSets)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdSetViewport)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdSetScissor)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdDraw)
@@ -977,11 +983,18 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 		.pDynamicStates = dynamics
 	};
 
-	// Descriptor set
+	// Descriptor set layout
+	VkDescriptorSetLayoutBinding modelViewProjectionBinding = {
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+	};
+
 	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = 0,
-		.pBindings = NULL
+		.bindingCount = 1,
+		.pBindings = &modelViewProjectionBinding
 	};
 	if(vkCreateDescriptorSetLayout(pVulkanData->device, &descriptorSetLayoutInfo, NULL, &pVulkanData->descriptorSetLayout) != VK_SUCCESS)
 	{
@@ -1256,6 +1269,66 @@ FrResult frCreateIndexBuffer(FrVulkanData* pVulkanData, uint32_t* pIndexes, uint
 	return FR_SUCCESS;
 }
 
+FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData)
+{
+	// Compute size
+	VkDeviceSize size = sizeof(FrModelViewProjection);
+
+	// Create uniform buffer
+	if(frCreateBuffer(
+		pVulkanData,
+		size,
+		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		&pVulkanData->modelViewProjectionBuffer,
+		&pVulkanData->modelViewProjectionBufferMemory
+	) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	vkMapMemory(pVulkanData->device, pVulkanData->modelViewProjectionBufferMemory, 0, size, 0, &pVulkanData->pModelViewProjectionData);
+
+	// Descriptor
+	VkDescriptorPoolSize poolSize = {
+		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.descriptorCount = 1
+	};
+
+	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.maxSets = 1,
+		.poolSizeCount = 1,
+		.pPoolSizes = &poolSize
+	};
+	if(vkCreateDescriptorPool(pVulkanData->device, &descriptorPoolCreateInfo, NULL, &pVulkanData->descriptorPool) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = pVulkanData->descriptorPool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &pVulkanData->descriptorSetLayout
+	};
+	if(vkAllocateDescriptorSets(pVulkanData->device, &descriptorSetAllocateInfo, &pVulkanData->descriptorSet) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	VkDescriptorBufferInfo bufferInfo = {
+		.buffer = pVulkanData->modelViewProjectionBuffer,
+		.offset = 0,
+		.range = sizeof(FrModelViewProjection)
+	};
+
+	VkWriteDescriptorSet descriptorWrite = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = pVulkanData->descriptorSet,
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.pBufferInfo = &bufferInfo
+	};
+
+	vkUpdateDescriptorSets(pVulkanData->device, 1, &descriptorWrite, 0, NULL);
+
+	return FR_SUCCESS;
+}
+
 FrResult frCreateCommandPool(FrVulkanData* pVulkanData)
 {
 	VkCommandPoolCreateInfo createInfo = {
@@ -1336,6 +1409,7 @@ FrResult frCreateCommandPool(FrVulkanData* pVulkanData)
 FrResult frDrawFrame(FrVulkanData* pVulkanData)
 {
 	static uint32_t imageIndex;
+	static struct timespec lastTime = {0,0}, currentTime;
 
 	if(vkWaitForFences(pVulkanData->device, 1, &pVulkanData->frameInFlightFence, VK_TRUE, UINT64_MAX) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
@@ -1390,6 +1464,16 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 		.extent = pVulkanData->extent
 	};
 	vkCmdSetScissor(pVulkanData->commandBuffer, 0, 1, &scissor);
+
+	if(timespec_get(&currentTime, TIME_UTC) != TIME_UTC) return FR_ERROR_UNKNOWN;
+	pVulkanData->updateHandler(
+		pVulkanData,
+		lastTime.tv_sec == 0 && lastTime.tv_nsec == 0 ? 0 :
+			(float)(((uintmax_t)currentTime.tv_sec - (uintmax_t)lastTime.tv_sec) * UINTMAX_C(1'000'000'000) + (uintmax_t)currentTime.tv_nsec - (uintmax_t)lastTime.tv_nsec) / 1'000'000'000.f,
+		pVulkanData->pModelViewProjectionData
+	);
+	lastTime = currentTime;
+	vkCmdBindDescriptorSets(pVulkanData->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pVulkanData->pipelineLayout, 0, 1, &pVulkanData->descriptorSet, 0, NULL);
 
 	// vkCmdDraw(pVulkanData->commandBuffer, pVulkanData->vertexCount, 1, 0, 0);
 	vkCmdDrawIndexed(pVulkanData->commandBuffer, pVulkanData->indexCount, 1, 0, 0, 0);
@@ -1446,4 +1530,10 @@ FrResult frRecreateSwapchain(FrVulkanData* pVulkanData)
 	pVulkanData->window.resized = false;
 
 	return FR_SUCCESS;
+}
+
+void frSetUpdateHandler(FrVulkanData* pVulkanData, FrUpdateHandler handler, void* pUserData)
+{
+	pVulkanData->updateHandler = handler;
+	pVulkanData->pUpdateHandlerUserData = pUserData;
 }
