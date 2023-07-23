@@ -19,7 +19,7 @@ typedef struct FrImage
 {
 	uint32_t width;
 	uint32_t height;
-	uint8_t* data;
+	uint8_t* pData;
 	FrImageType type;
 } FrImage;
 

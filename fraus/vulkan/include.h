@@ -18,6 +18,7 @@ typedef struct FrVertex
 {
 	FrVec3 position;
 	FrVec3 color;
+	FrVec2 textureCoordinates;
 } FrVertex;
 
 typedef struct FrModelViewProjection
@@ -65,6 +66,10 @@ typedef struct FrVulkanData
 	void* pModelViewProjectionData;
 	VkDescriptorPool descriptorPool;
 	VkDescriptorSet descriptorSet;
+	VkImage textureImage;
+	VkDeviceMemory textureImageMemory;
+	VkImageView textureImageView;
+	VkSampler textureSampler;
 	VkCommandPool commandPool;
 	VkCommandBuffer commandBuffer;
 	VkSemaphore imageAvailableSemaphore;

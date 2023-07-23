@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "functions.h"
+#include "../images/images.h"
 
 /*
  * Check that required layers are available
@@ -269,6 +270,8 @@ FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVu
 #endif
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkDestroySurfaceKHR)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkEnumeratePhysicalDevices)
+	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceProperties)
+	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceFeatures)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceQueueFamilyProperties)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceMemoryProperties)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR)
@@ -395,12 +398,17 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 		.pQueuePriorities = &priority
 	};
 
+	VkPhysicalDeviceFeatures features, wantedFeatures = {VK_FALSE};
+	vkGetPhysicalDeviceFeatures(pVulkanData->physicalDevice, &features);
+	wantedFeatures.samplerAnisotropy = features.samplerAnisotropy;
+
 	VkDeviceCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
 		.queueCreateInfoCount = 1,
 		.pQueueCreateInfos = &queueCreateInfo,
 		.enabledExtensionCount = extensionCount,
-		.ppEnabledExtensionNames = ppExtensions
+		.ppEnabledExtensionNames = ppExtensions,
+		.pEnabledFeatures = &wantedFeatures
 	};
 
 // Load device layers for compatibility
@@ -434,8 +442,12 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateSwapchainKHR)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroySwapchainKHR)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkGetSwapchainImagesKHR)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateImage)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyImage)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateImageView)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyImageView)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateSampler)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroySampler)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateFramebuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyFramebuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateRenderPass)
@@ -451,9 +463,11 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkDestroyBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkGetBufferMemoryRequirements)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkGetImageMemoryRequirements)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkAllocateMemory)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkFreeMemory)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkBindBufferMemory)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkBindImageMemory)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkMapMemory)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkUnmapMemory)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCreateSemaphore)
@@ -481,7 +495,9 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBeginRenderPass)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdEndRenderPass)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindPipeline)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdPipelineBarrier)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdCopyBuffer)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdCopyBufferToImage)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindVertexBuffers)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindIndexBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindDescriptorSets)
@@ -530,6 +546,29 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
+
+	return FR_SUCCESS;
+}
+
+static FrResult frCreateImageView(FrVulkanData* pVulkanData, VkImage image, VkFormat format, VkImageView* pImageView)
+{
+	VkImageViewCreateInfo createInfo = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.image = image,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.format = format,
+		.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.subresourceRange.baseMipLevel = 0,
+		.subresourceRange.levelCount = 1,
+		.subresourceRange.baseArrayLayer = 0,
+		.subresourceRange.layerCount = 1
+	};
+
+	if(vkCreateImageView(pVulkanData->device, &createInfo, NULL, pImageView) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	return FR_SUCCESS;
 }
@@ -641,22 +680,7 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 	pVulkanData->pImageViews = pNewImageViews;
 	for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
 	{
-		VkImageViewCreateInfo imageViewInfo = {
-			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-			.image = pVulkanData->pImages[imageIndex],
-			.viewType = VK_IMAGE_VIEW_TYPE_2D,
-			.format = pVulkanData->format,
-			.components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
-			.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.subresourceRange.baseMipLevel = 0,
-			.subresourceRange.levelCount = 1,
-			.subresourceRange.baseArrayLayer = 0,
-			.subresourceRange.layerCount = 1
-		};
-		if(vkCreateImageView(pVulkanData->device, &imageViewInfo, NULL, &pVulkanData->pImageViews[imageIndex]) != VK_SUCCESS)
+		if(frCreateImageView(pVulkanData, pVulkanData->pImages[imageIndex], pVulkanData->format, &pVulkanData->pImageViews[imageIndex]) != FR_SUCCESS)
 		{
 			for(uint32_t j = 0; j < imageIndex; ++j)
 			{
@@ -885,7 +909,7 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 	// Vertex input
 	VkVertexInputBindingDescription binding = {
 		.binding = 0,
-		.stride = 6 * sizeof(float),
+		.stride = sizeof(FrVertex),
 		.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
 	};
 
@@ -894,14 +918,20 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 			.binding = 0,
 			.location = 0,
 			.format = VK_FORMAT_R32G32B32_SFLOAT,
-			.offset = 0
+			.offset = offsetof(FrVertex, position)
 		},
 		{
 			.binding = 0,
 			.location = 1,
 			.format = VK_FORMAT_R32G32B32_SFLOAT,
-			.offset = 3 * sizeof(float)
+			.offset = offsetof(FrVertex, color)
 		},
+		{
+			.binding = 0,
+			.location = 2,
+			.format = VK_FORMAT_R32G32_SFLOAT,
+			.offset = offsetof(FrVertex, textureCoordinates)
+		}
 	};
 
 	VkPipelineVertexInputStateCreateInfo vertexInput = {
@@ -984,17 +1014,25 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 	};
 
 	// Descriptor set layout
-	VkDescriptorSetLayoutBinding modelViewProjectionBinding = {
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+	VkDescriptorSetLayoutBinding bindings[] = {
+		{
+			.binding = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+		},
+		{
+			.binding = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+		}
 	};
 
 	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = 1,
-		.pBindings = &modelViewProjectionBinding
+		.bindingCount = sizeof(bindings) / sizeof(VkDescriptorSetLayoutBinding),
+		.pBindings = bindings
 	};
 	if(vkCreateDescriptorSetLayout(pVulkanData->device, &descriptorSetLayoutInfo, NULL, &pVulkanData->descriptorSetLayout) != VK_SUCCESS)
 	{
@@ -1043,6 +1081,26 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 	return FR_SUCCESS;
 }
 
+static FrResult frFindMemoryTypeIndex(FrVulkanData* pVulkanData, uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* pIndex)
+{
+	VkPhysicalDeviceMemoryProperties memoryProperties;
+	vkGetPhysicalDeviceMemoryProperties(pVulkanData->physicalDevice, &memoryProperties);
+
+	uint32_t memoryTypeIndex;
+	for(memoryTypeIndex = 0; memoryTypeIndex < memoryProperties.memoryTypeCount; ++memoryTypeIndex)
+	{
+		if(
+			(typeBits & (1 << memoryTypeIndex)) &&
+			(memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & properties) == properties
+		) break;
+	}
+	if(memoryTypeIndex >= memoryProperties.memoryTypeCount) return FR_ERROR_UNKNOWN;
+
+	*pIndex = memoryTypeIndex;
+
+	return FR_SUCCESS;
+}
+
 static FrResult frCreateBuffer(FrVulkanData* pVulkanData, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* pBuffer, VkDeviceMemory* pBufferMemory)
 {
 	// Create buffer
@@ -1059,18 +1117,8 @@ static FrResult frCreateBuffer(FrVulkanData* pVulkanData, VkDeviceSize size, VkB
 	VkMemoryRequirements memoryRequirements;
 	vkGetBufferMemoryRequirements(pVulkanData->device, *pBuffer, &memoryRequirements);
 
-	VkPhysicalDeviceMemoryProperties memoryProperties;
-	vkGetPhysicalDeviceMemoryProperties(pVulkanData->physicalDevice, &memoryProperties);
-
 	uint32_t memoryTypeIndex;
-	for(memoryTypeIndex = 0; memoryTypeIndex < memoryProperties.memoryTypeCount; ++memoryTypeIndex)
-	{
-		if(
-			(memoryRequirements.memoryTypeBits & (1 << memoryTypeIndex)) &&
-			(memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & properties) == properties
-		) break;
-	}
-	if(memoryTypeIndex >= memoryProperties.memoryTypeCount)
+	if(frFindMemoryTypeIndex(pVulkanData, memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex) != FR_SUCCESS)
 	{
 		vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
 		return FR_ERROR_UNKNOWN;
@@ -1098,7 +1146,7 @@ static FrResult frCreateBuffer(FrVulkanData* pVulkanData, VkDeviceSize size, VkB
 	return FR_SUCCESS;
 }
 
-static FrResult frCopyBuffer(FrVulkanData* pVulkanData, VkBuffer sourceBuffer, VkBuffer destinationBuffer, VkDeviceSize size)
+static FrResult frBeginCommandBuffer(FrVulkanData* pVulkanData, VkCommandBuffer* pCommandBuffer)
 {
 	// Create command buffer
 	VkCommandBufferAllocateInfo allocateInfo = {
@@ -1107,26 +1155,24 @@ static FrResult frCopyBuffer(FrVulkanData* pVulkanData, VkBuffer sourceBuffer, V
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		.commandBufferCount = 1
 	};
-	VkCommandBuffer commandBuffer;
-	if(vkAllocateCommandBuffers(pVulkanData->device, &allocateInfo, &commandBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(vkAllocateCommandBuffers(pVulkanData->device, &allocateInfo, pCommandBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	// Begin command buffer
 	VkCommandBufferBeginInfo beginInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
 	};
-	if(vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
+	if(vkBeginCommandBuffer(*pCommandBuffer, &beginInfo) != VK_SUCCESS)
 	{
-		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
-		return EXIT_FAILURE;
+		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, pCommandBuffer);
+		return FR_ERROR_UNKNOWN;
 	}
 
-	// Copy buffer
-	VkBufferCopy region = {
-		.size = size
-	};
-	vkCmdCopyBuffer(commandBuffer, sourceBuffer, destinationBuffer, 1, &region);
+	return FR_SUCCESS;
+}
 
+static FrResult frEndCommandBuffer(FrVulkanData* pVulkanData, VkCommandBuffer commandBuffer)
+{
 	// End command buffer
 	if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
 	{
@@ -1155,6 +1201,24 @@ static FrResult frCopyBuffer(FrVulkanData* pVulkanData, VkBuffer sourceBuffer, V
 
 	// Free command buffer
 	vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
+
+	return FR_SUCCESS;
+}
+
+static FrResult frCopyBuffer(FrVulkanData* pVulkanData, VkBuffer sourceBuffer, VkBuffer destinationBuffer, VkDeviceSize size)
+{
+	// Create command buffer
+	VkCommandBuffer commandBuffer;
+	if(frBeginCommandBuffer(pVulkanData, &commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	// Copy buffer
+	VkBufferCopy region = {
+		.size = size
+	};
+	vkCmdCopyBuffer(commandBuffer, sourceBuffer, destinationBuffer, 1, &region);
+
+	// End command buffer
+	if(frEndCommandBuffer(pVulkanData, commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	return FR_SUCCESS;
 }
@@ -1287,16 +1351,22 @@ FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData)
 	vkMapMemory(pVulkanData->device, pVulkanData->modelViewProjectionBufferMemory, 0, size, 0, &pVulkanData->pModelViewProjectionData);
 
 	// Descriptor
-	VkDescriptorPoolSize poolSize = {
-		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.descriptorCount = 1
+	VkDescriptorPoolSize poolSizes[] = {
+		{
+			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1
+		},
+		{
+			.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 1
+		}
 	};
 
 	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 		.maxSets = 1,
-		.poolSizeCount = 1,
-		.pPoolSizes = &poolSize
+		.poolSizeCount = sizeof(poolSizes) / sizeof(VkDescriptorPoolSize),
+		.pPoolSizes = poolSizes
 	};
 	if(vkCreateDescriptorPool(pVulkanData->device, &descriptorPoolCreateInfo, NULL, &pVulkanData->descriptorPool) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
@@ -1314,17 +1384,299 @@ FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData)
 		.range = sizeof(FrModelViewProjection)
 	};
 
-	VkWriteDescriptorSet descriptorWrite = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = pVulkanData->descriptorSet,
-		.dstBinding = 0,
-		.dstArrayElement = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.pBufferInfo = &bufferInfo
+	VkDescriptorImageInfo imageInfo = {
+		.sampler = pVulkanData->textureSampler,
+		.imageView = pVulkanData->textureImageView,
+		.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 	};
 
-	vkUpdateDescriptorSets(pVulkanData->device, 1, &descriptorWrite, 0, NULL);
+	VkWriteDescriptorSet descriptorWrites[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = pVulkanData->descriptorSet,
+			.dstBinding = 0,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.pBufferInfo = &bufferInfo
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = pVulkanData->descriptorSet,
+			.dstBinding = 1,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.pImageInfo = &imageInfo
+		}
+	};
+
+	vkUpdateDescriptorSets(pVulkanData->device, sizeof(descriptorWrites) / sizeof(VkWriteDescriptorSet), descriptorWrites, 0, NULL);
+
+	return FR_SUCCESS;
+}
+
+static FrResult frTransitionImageLayout(FrVulkanData* pVulkanData, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout)
+{
+	VkCommandBuffer commandBuffer;
+	if (frBeginCommandBuffer(pVulkanData, &commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	VkPipelineStageFlags sourceStage, destinationStage;
+
+	VkImageMemoryBarrier barrier = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+		.oldLayout = oldLayout,
+		.newLayout = newLayout,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.image = image,
+		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.subresourceRange.baseMipLevel = 0,
+		.subresourceRange.levelCount = 1,
+		.subresourceRange.baseArrayLayer = 0,
+		.subresourceRange.layerCount = 1
+	};
+
+	if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+	{
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	}
+	else if(oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+	{
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	}
+	else
+	{
+		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
+		return FR_ERROR_INVALID_ARGUMENT;
+	}
+
+	vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
+
+	if(frEndCommandBuffer(pVulkanData, commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	return FR_SUCCESS;
+}
+
+static FrResult frCopyBufferToImage(FrVulkanData* pVulkanData, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+{
+	VkCommandBuffer commandBuffer;
+	if(frBeginCommandBuffer(pVulkanData, &commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	VkBufferImageCopy region = {
+		.bufferOffset = 0,
+		.bufferRowLength = 0,
+		.bufferImageHeight = 0,
+		.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.imageSubresource.mipLevel = 0,
+		.imageSubresource.baseArrayLayer = 0,
+		.imageSubresource.layerCount = 1,
+		.imageOffset = {0, 0, 0},
+		.imageExtent = {width, height, 1}
+	};
+	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+	if(frEndCommandBuffer(pVulkanData, commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	return FR_SUCCESS;
+}
+
+FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
+{
+	// Load image
+	FrImage image;
+	if(frLoadPNG(pPath, &image) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	// TODO: convert image type in frLoadPNG with parameter
+	if(image.type == FR_RGB)
+	{
+		uint8_t* pNewData = malloc(image.width * image.height * 4);
+		if(!pNewData)
+		{
+			free(image.pData);
+			return FR_ERROR_OUT_OF_MEMORY;
+		}
+
+		for(size_t i = 0; i < image.width * image.height * FR_RGB; ++i)
+		{
+			pNewData[i + i / 3] = image.pData[i];
+		}
+		for(size_t i = 0; i < image.width * image.height; ++i)
+		{
+			pNewData[4 * i + 3] = 255;
+		}
+		free(image.pData);
+		image.pData = pNewData;
+	}
+
+	// Compute size
+	VkDeviceSize size = image.width * image.height * 4;
+
+	// Create staging buffer
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingBufferMemory;
+	if(frCreateBuffer(
+		pVulkanData,
+		size,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		&stagingBuffer,
+		&stagingBufferMemory
+	) != VK_SUCCESS)
+	{
+		free(image.pData);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Upload data to the device
+	void* pData;
+	if(vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData) != VK_SUCCESS)
+	{
+		free(image.pData);
+		return FR_ERROR_UNKNOWN;
+	}
+	memcpy(pData, image.pData, size);
+	vkUnmapMemory(pVulkanData->device, stagingBufferMemory);
+
+	// Free image
+	free(image.pData);
+
+	// Create image
+	VkImageCreateInfo createInfo = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.imageType = VK_IMAGE_TYPE_2D,
+		.format = VK_FORMAT_R8G8B8A8_SRGB,
+		.extent.width = image.width,
+		.extent.height = image.height,
+		.extent.depth = 1,
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+	};
+	if(vkCreateImage(pVulkanData->device, &createInfo, NULL, &pVulkanData->textureImage) != VK_SUCCESS)
+	{
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Memory allocation
+	VkMemoryRequirements memoryRequirements;
+	vkGetImageMemoryRequirements(pVulkanData->device, pVulkanData->textureImage, &memoryRequirements);
+
+	uint32_t memoryTypeIndex;
+	if(frFindMemoryTypeIndex(pVulkanData, memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &memoryTypeIndex) != FR_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	VkMemoryAllocateInfo allocateInfo = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = memoryRequirements.size,
+		.memoryTypeIndex = memoryTypeIndex
+	};
+
+	if(vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, &pVulkanData->textureImageMemory) != VK_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	if(vkBindImageMemory(pVulkanData->device, pVulkanData->textureImage, pVulkanData->textureImageMemory, 0) != VK_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
+		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Copy data to image
+	if(frTransitionImageLayout(pVulkanData, pVulkanData->textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) != FR_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
+		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	if(frCopyBufferToImage(pVulkanData, stagingBuffer, pVulkanData->textureImage, image.width, image.height) != FR_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
+		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	if(frTransitionImageLayout(pVulkanData, pVulkanData->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) != FR_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
+		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+	vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+
+	// Create image view
+	if(frCreateImageView(pVulkanData, pVulkanData->textureImage, VK_FORMAT_R8G8B8A8_SRGB, &pVulkanData->textureImageView) != FR_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
+		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	// Create sampler
+	VkPhysicalDeviceFeatures features;
+	vkGetPhysicalDeviceFeatures(pVulkanData->physicalDevice, &features);
+	VkPhysicalDeviceProperties properties;
+	vkGetPhysicalDeviceProperties(pVulkanData->physicalDevice, &properties);
+	VkSamplerCreateInfo samplerCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.magFilter = VK_FILTER_LINEAR,
+		.minFilter = VK_FILTER_LINEAR,
+		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+		.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		.mipLodBias = 0.f,
+		.anisotropyEnable = features.samplerAnisotropy,
+		.maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+		.compareEnable = VK_FALSE,
+		.compareOp = VK_COMPARE_OP_ALWAYS,
+		.minLod = 0.f,
+		.maxLod = 0.f,
+		.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+		.unnormalizedCoordinates = VK_FALSE
+	};
+	if(vkCreateSampler(pVulkanData->device, &samplerCreateInfo, NULL, &pVulkanData->textureSampler) != VK_SUCCESS)
+	{
+		vkDestroyImageView(pVulkanData->device, pVulkanData->textureImageView, NULL);
+		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
+		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
 
 	return FR_SUCCESS;
 }

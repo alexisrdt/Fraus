@@ -230,8 +230,8 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 
-			pImage->data = (uint8_t*)malloc(pImage->width * pImage->height * 3);
-			if(!pImage->data)
+			pImage->pData = (uint8_t*)malloc(pImage->width * pImage->height * 3);
+			if(!pImage->pData)
 			{
 				free(pTypeAndData);
 				fclose(file);
@@ -425,7 +425,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 0:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1];
+					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1];
 				}
 				break;
 
@@ -433,7 +433,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 1:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + (j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j]);
+					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + (j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j]);
 				}
 				break;
 
@@ -441,7 +441,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 2:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + pImage->data[pImage->width * pImage->type * (i - 1) + j];
+					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + pImage->pData[pImage->width * pImage->type * (i - 1) + j];
 				}
 				break;
 
@@ -449,7 +449,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 3:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->data[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + ((j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j]) + pImage->data[pImage->width * pImage->type * (i - 1) + j]) / 2;
+					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + ((j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j]) + pImage->pData[pImage->width * pImage->type * (i - 1) + j]) / 2;
 				}
 				break;
 
@@ -457,12 +457,12 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 4:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->data[pImage->width * pImage->type * i + j] =
+					pImage->pData[pImage->width * pImage->type * i + j] =
 						pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] +
 						frPaeth(
-							j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j],
-							pImage->data[pImage->width * pImage->type * (i - 1) + j],
-							j < pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * (i - 1) - 1) + j]
+							j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j],
+							pImage->pData[pImage->width * pImage->type * (i - 1) + j],
+							j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * (i - 1) - 1) + j]
 						);
 				}
 				break;

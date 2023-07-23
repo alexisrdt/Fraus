@@ -1,11 +1,30 @@
 #ifndef FRAUS_MATH_H
 #define FRAUS_MATH_H
 
-typedef struct FrVec3
+typedef union FrVec2
 {
-	float x;
-	float y;
-	float z;
+	struct {
+		float x;
+		float y;
+	};
+	struct {
+		float u;
+		float v;
+	};
+} FrVec2;
+
+typedef union FrVec3
+{
+	struct {
+		float x;
+		float y;
+		float z;
+	};
+	struct {
+		float r;
+		float g;
+		float b;
+	};
 } FrVec3;
 
 float frDot(const FrVec3* pFirst, const FrVec3* pSecond);
