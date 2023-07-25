@@ -69,6 +69,9 @@ typedef struct FrVulkanData
 	VkImage textureImage;
 	VkDeviceMemory textureImageMemory;
 	VkImageView textureImageView;
+	VkImage depthImage;
+	VkDeviceMemory depthImageMemory;
+	VkImageView depthImageView;
 	VkSampler textureSampler;
 	VkCommandPool commandPool;
 	VkCommandBuffer commandBuffer;

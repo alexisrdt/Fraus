@@ -34,6 +34,26 @@ FrVec3 frSubstract(const FrVec3* pFirst, const FrVec3* pSecond)
 	};
 }
 
+void frIdentity(float matrix[16])
+{
+	matrix[ 0] = 1.f;
+	matrix[ 1] = 0.f;
+	matrix[ 2] = 0.f;
+	matrix[ 3] = 0.f;
+	matrix[ 4] = 0.f;
+	matrix[ 5] = 1.f;
+	matrix[ 6] = 0.f;
+	matrix[ 7] = 0.f;
+	matrix[ 8] = 0.f;
+	matrix[ 9] = 0.f;
+	matrix[10] = 1.f;
+	matrix[11] = 0.f;
+	matrix[12] = 0.f;
+	matrix[13] = 0.f;
+	matrix[14] = 0.f;
+	matrix[15] = 1.f;
+}
+
 void frZRotation(float matrix[16], float angle)
 {
 	const float c = cosf(angle);

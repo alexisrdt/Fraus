@@ -45,6 +45,12 @@ typedef enum FrKey
 	FR_KEY_UNKNOWN
 } FrKey;
 
+typedef enum FrKeyStatus
+{
+	FR_KEY_STATUS_DOWN,
+	FR_KEY_STATUS_UP,
+} FrKeyStatus;
+
 // Mouse button enum
 typedef enum FrMouseButton
 {
@@ -55,7 +61,7 @@ typedef enum FrMouseButton
 // Handlers
 typedef void(*FrMouseMoveHandler)(uint16_t x, uint16_t y, void* pUserData);
 typedef void(*FrClickHandler)(FrMouseButton button, void* pUserData);
-typedef void(*FrKeyHandler)(FrKey key, void* pUserData);
+typedef void(*FrKeyHandler)(FrKey key, FrKeyStatus status, void* pUserData);
 typedef void(*FrResizeHandler)(uint16_t newWidth, uint16_t newHeight, void* pUserData);
 
 typedef struct FrEventHandlers

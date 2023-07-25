@@ -274,6 +274,7 @@ FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVu
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceFeatures)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceQueueFamilyProperties)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceMemoryProperties)
+	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceFormatProperties)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceSurfaceCapabilitiesKHR)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceSurfaceFormatsKHR)
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceSurfacePresentModesKHR)
@@ -550,7 +551,7 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	return FR_SUCCESS;
 }
 
-static FrResult frCreateImageView(FrVulkanData* pVulkanData, VkImage image, VkFormat format, VkImageView* pImageView)
+static FrResult frCreateImageView(FrVulkanData* pVulkanData, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView* pImageView)
 {
 	VkImageViewCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -561,7 +562,7 @@ static FrResult frCreateImageView(FrVulkanData* pVulkanData, VkImage image, VkFo
 		.components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
 		.components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
 		.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
-		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.subresourceRange.aspectMask = aspectFlags,
 		.subresourceRange.baseMipLevel = 0,
 		.subresourceRange.levelCount = 1,
 		.subresourceRange.baseArrayLayer = 0,
@@ -680,7 +681,7 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 	pVulkanData->pImageViews = pNewImageViews;
 	for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
 	{
-		if(frCreateImageView(pVulkanData, pVulkanData->pImages[imageIndex], pVulkanData->format, &pVulkanData->pImageViews[imageIndex]) != FR_SUCCESS)
+		if(frCreateImageView(pVulkanData, pVulkanData->pImages[imageIndex], pVulkanData->format, VK_IMAGE_ASPECT_COLOR_BIT, &pVulkanData->pImageViews[imageIndex]) != FR_SUCCESS)
 		{
 			for(uint32_t j = 0; j < imageIndex; ++j)
 			{
@@ -728,26 +729,43 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 
 FrResult frCreateRenderPass(FrVulkanData* pVulkanData)
 {
-	VkAttachmentDescription attachment = {
-		.format = pVulkanData->format,
-		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+	VkAttachmentDescription attachments[] = {
+		{
+			.format = pVulkanData->format,
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+		},
+		{
+			.format = VK_FORMAT_D24_UNORM_S8_UINT,
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+			.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+		}
 	};
 
-	VkAttachmentReference attachmentReference = {
+	VkAttachmentReference colorAttachmentReference = {
 		.attachment = 0,
 		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+	};
+	VkAttachmentReference depthAttachmentReference = {
+		.attachment = 1,
+		.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 	};
 
 	VkSubpassDescription subpass = {
 		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
 		.colorAttachmentCount = 1,
-		.pColorAttachments = &attachmentReference
+		.pColorAttachments = &colorAttachmentReference,
+		.pDepthStencilAttachment = &depthAttachmentReference
 	};
 
 	VkSubpassDependency dependency = {
@@ -756,13 +774,13 @@ FrResult frCreateRenderPass(FrVulkanData* pVulkanData)
 		.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
 		.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
 		.srcAccessMask = 0,
-		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
 	};
 
 	VkRenderPassCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-		.attachmentCount = 1,
-		.pAttachments = &attachment,
+		.attachmentCount = sizeof(attachments) / sizeof(VkAttachmentDescription),
+		.pAttachments = attachments,
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
@@ -795,11 +813,15 @@ FrResult frCreateFramebuffers(FrVulkanData* pVulkanData)
 
 	for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
 	{
+		VkImageView attachments[] = {
+			pVulkanData->pImageViews[imageIndex],
+			pVulkanData->depthImageView
+		};
 		VkFramebufferCreateInfo framebufferInfo = {
 			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
 			.renderPass = pVulkanData->renderPass,
-			.attachmentCount = 1,
-			.pAttachments = &pVulkanData->pImageViews[imageIndex],
+			.attachmentCount = sizeof(attachments) / sizeof(VkImageView),
+			.pAttachments = attachments,
 			.width = pVulkanData->extent.width,
 			.height = pVulkanData->extent.height,
 			.layers = 1
@@ -1489,6 +1511,59 @@ static FrResult frCopyBufferToImage(FrVulkanData* pVulkanData, VkBuffer buffer, 
 	return FR_SUCCESS;
 }
 
+static FrResult frCreateImage(FrVulkanData* pVulkanData, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* pImage, VkDeviceMemory* pImageMemory)
+{
+	// Create image
+	VkImageCreateInfo createInfo = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.imageType = VK_IMAGE_TYPE_2D,
+		.format = format,
+		.extent.width = width,
+		.extent.height = height,
+		.extent.depth = 1,
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.tiling = tiling,
+		.usage = usage,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+	};
+	if(vkCreateImage(pVulkanData->device, &createInfo, NULL, pImage) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	// Memory allocation
+	VkMemoryRequirements memoryRequirements;
+	vkGetImageMemoryRequirements(pVulkanData->device, *pImage, &memoryRequirements);
+
+	uint32_t memoryTypeIndex;
+	if(frFindMemoryTypeIndex(pVulkanData, memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex) != FR_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	VkMemoryAllocateInfo allocateInfo = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = memoryRequirements.size,
+		.memoryTypeIndex = memoryTypeIndex
+	};
+
+	if(vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, pImageMemory) != VK_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	if(vkBindImageMemory(pVulkanData->device, *pImage, *pImageMemory, 0) != VK_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	return FR_SUCCESS;
+}
+
 FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 {
 	// Load image
@@ -1550,59 +1625,18 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 	free(image.pData);
 
 	// Create image
-	VkImageCreateInfo createInfo = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-		.imageType = VK_IMAGE_TYPE_2D,
-		.format = VK_FORMAT_R8G8B8A8_SRGB,
-		.extent.width = image.width,
-		.extent.height = image.height,
-		.extent.depth = 1,
-		.mipLevels = 1,
-		.arrayLayers = 1,
-		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.tiling = VK_IMAGE_TILING_OPTIMAL,
-		.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
-	};
-	if(vkCreateImage(pVulkanData->device, &createInfo, NULL, &pVulkanData->textureImage) != VK_SUCCESS)
+	if(frCreateImage(
+		pVulkanData,
+		image.width,
+		image.height,
+		VK_FORMAT_R8G8B8A8_SRGB,
+		VK_IMAGE_TILING_OPTIMAL,
+		VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		&pVulkanData->textureImage,
+		&pVulkanData->textureImageMemory
+	) != VK_SUCCESS)
 	{
-		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	// Memory allocation
-	VkMemoryRequirements memoryRequirements;
-	vkGetImageMemoryRequirements(pVulkanData->device, pVulkanData->textureImage, &memoryRequirements);
-
-	uint32_t memoryTypeIndex;
-	if(frFindMemoryTypeIndex(pVulkanData, memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &memoryTypeIndex) != FR_SUCCESS)
-	{
-		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
-		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	VkMemoryAllocateInfo allocateInfo = {
-		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-		.allocationSize = memoryRequirements.size,
-		.memoryTypeIndex = memoryTypeIndex
-	};
-
-	if(vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, &pVulkanData->textureImageMemory) != VK_SUCCESS)
-	{
-		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
-		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	if(vkBindImageMemory(pVulkanData->device, pVulkanData->textureImage, pVulkanData->textureImageMemory, 0) != VK_SUCCESS)
-	{
-		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
-		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
 		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
 		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 		return FR_ERROR_UNKNOWN;
@@ -1640,7 +1674,7 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 	vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 
 	// Create image view
-	if(frCreateImageView(pVulkanData, pVulkanData->textureImage, VK_FORMAT_R8G8B8A8_SRGB, &pVulkanData->textureImageView) != FR_SUCCESS)
+	if(frCreateImageView(pVulkanData, pVulkanData->textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, &pVulkanData->textureImageView) != FR_SUCCESS)
 	{
 		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
 		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
@@ -1675,6 +1709,34 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 		vkDestroyImageView(pVulkanData->device, pVulkanData->textureImageView, NULL);
 		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
 		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	return FR_SUCCESS;
+}
+
+FrResult frCreateDepthImage(FrVulkanData* pVulkanData)
+{
+	VkFormatProperties properties;
+	vkGetPhysicalDeviceFormatProperties(pVulkanData->physicalDevice, VK_FORMAT_D24_UNORM_S8_UINT, &properties);
+	if(!(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)) return FR_ERROR_UNKNOWN;
+
+	if(frCreateImage(
+		pVulkanData,
+		pVulkanData->extent.width,
+		pVulkanData->extent.height,
+		VK_FORMAT_D24_UNORM_S8_UINT,
+		VK_IMAGE_TILING_OPTIMAL,
+		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		&pVulkanData->depthImage,
+		&pVulkanData->depthImageMemory
+	) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	if(frCreateImageView(pVulkanData, pVulkanData->depthImage, VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT, &pVulkanData->depthImageView) != FR_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, pVulkanData->depthImage, NULL);
+		vkFreeMemory(pVulkanData->device, pVulkanData->depthImageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
@@ -1780,8 +1842,9 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 	};
 	if(vkBeginCommandBuffer(pVulkanData->commandBuffer, &beginInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
-	VkClearValue clearColor = {
-		{{0.f, 0.f, 0.f, 0.f}},
+	VkClearValue clearValues[] = {
+		{{{0.f, 0.f, 0.f, 0.f}}},
+		{{1.f, 0}}
 	};
 	VkRenderPassBeginInfo renderPassBegin = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -1789,8 +1852,8 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 		.framebuffer = pVulkanData->pFramebuffers[imageIndex],
 		.renderArea.offset = {0, 0},
 		.renderArea.extent = pVulkanData->extent,
-		.clearValueCount = 1,
-		.pClearValues = &clearColor
+		.clearValueCount = sizeof(clearValues) / sizeof(VkClearValue),
+		.pClearValues = clearValues
 	};
 	vkCmdBeginRenderPass(pVulkanData->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -1873,8 +1936,12 @@ FrResult frRecreateSwapchain(FrVulkanData* pVulkanData)
 		vkDestroyFramebuffer(pVulkanData->device, pVulkanData->pFramebuffers[imageIndex], NULL);
 		vkDestroyImageView(pVulkanData->device, pVulkanData->pImageViews[imageIndex], NULL);
 	}
+	vkDestroyImageView(pVulkanData->device, pVulkanData->depthImageView, NULL);
+	vkDestroyImage(pVulkanData->device, pVulkanData->depthImage, NULL);
+	vkFreeMemory(pVulkanData->device, pVulkanData->depthImageMemory, NULL);
 
 	if(frCreateSwapchain(pVulkanData) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(frCreateDepthImage(pVulkanData) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 	if(frCreateFramebuffers(pVulkanData) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	vkDestroySwapchainKHR(pVulkanData->device, oldSwapchain, NULL);

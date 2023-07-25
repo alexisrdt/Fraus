@@ -76,7 +76,11 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 			break;
 
 		case WM_KEYDOWN:
-			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam), pWindow->handlers.pKeyHandlerUserData);
+			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam), FR_KEY_STATUS_DOWN, pWindow->handlers.pKeyHandlerUserData);
+			break;
+
+		case WM_KEYUP:
+			if (pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam), FR_KEY_STATUS_UP, pWindow->handlers.pKeyHandlerUserData);
 			break;
 
 		case WM_SIZE:

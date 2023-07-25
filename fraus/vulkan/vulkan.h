@@ -18,6 +18,7 @@ FrResult frCreateVertexBuffer(FrVulkanData* pVulkanData, FrVertex* pVertices, ui
 FrResult frCreateIndexBuffer(FrVulkanData* pVulkanData, uint32_t* pIndexes, uint32_t indexCount);
 FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData);
 FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath);
+FrResult frCreateDepthImage(FrVulkanData* pVulkanData);
 FrResult frCreateCommandPool(FrVulkanData* pVulkanData);
 FrResult frDrawFrame(FrVulkanData* pVulkanData);
 

@@ -35,7 +35,7 @@ FrResult frCreateThread(FrThread* pThread, FrThreadProc proc, void* pArg)
 {
 #ifdef _WIN32
 
-	*pThread = (FrThread)_beginthreadex(NULL, 0, proc, pArg, 0, NULL);
+	*pThread = (FrThread)_beginthreadex(NULL, 0, (_beginthreadex_proc_type)proc, pArg, 0, NULL);
 	if(!*pThread) return errno == EACCES ? FR_ERROR_OUT_OF_MEMORY : FR_ERROR_UNKNOWN;
 
 #else
