@@ -945,14 +945,14 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 		{
 			.binding = 0,
 			.location = 1,
-			.format = VK_FORMAT_R32G32B32_SFLOAT,
-			.offset = offsetof(FrVertex, color)
+			.format = VK_FORMAT_R32G32_SFLOAT,
+			.offset = offsetof(FrVertex, textureCoordinates)
 		},
 		{
 			.binding = 0,
 			.location = 2,
-			.format = VK_FORMAT_R32G32_SFLOAT,
-			.offset = offsetof(FrVertex, textureCoordinates)
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = offsetof(FrVertex, normal)
 		}
 	};
 
@@ -990,7 +990,8 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 		.depthClampEnable = VK_FALSE,
 		.rasterizerDiscardEnable = VK_FALSE,
 		.polygonMode = VK_POLYGON_MODE_FILL,
-		.cullMode = VK_CULL_MODE_BACK_BIT,
+		// .cullMode = VK_CULL_MODE_BACK_BIT,
+		.cullMode = VK_CULL_MODE_NONE,
 		.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
 		.depthBiasEnable = VK_FALSE,
 		.lineWidth = 1.f

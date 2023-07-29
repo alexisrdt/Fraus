@@ -14,13 +14,6 @@
 #include "../math.h"
 #include "../window.h"
 
-typedef struct FrVertex
-{
-	FrVec3 position;
-	FrVec3 color;
-	FrVec2 textureCoordinates;
-} FrVertex;
-
 typedef struct FrModelViewProjection
 {
 	float model[16];

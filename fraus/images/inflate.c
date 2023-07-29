@@ -1,5 +1,6 @@
 #include "inflate.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -490,7 +491,7 @@ static FrResult frInflateBlock(FrInflateData* pData)
 		codeLengthCount += 4;
 
 		// Define the order of code length symbols
-		const uint16_t pCodeLengthSymbolOrder[] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+		const uint16_t pCodeLengthSymbolOrder[19] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
 
 		// Read and count lengths, find max length
 		uint8_t pCodeLengthSymbolLength[19] = {0};
@@ -589,7 +590,7 @@ static FrResult frInflateBlock(FrInflateData* pData)
 					{
 						pLiteralLengthSymbolLength[symbolIndex] = (uint8_t)symbol;
 						++pLiteralLengthLengthCount[symbol];
-						if (symbol > literalLengthMaxLength) literalLengthMaxLength = (uint8_t)symbol;
+						if(symbol > literalLengthMaxLength) literalLengthMaxLength = (uint8_t)symbol;
 						break;
 					}
 
@@ -634,7 +635,12 @@ static FrResult frInflateBlock(FrInflateData* pData)
 		}
 
 		// Invalid value
-		if(literalLengthSymbol >= 286) return FR_ERROR_CORRUPTED_FILE;
+		if(literalLengthSymbol >= 286)
+		{
+			frFreeInflateTable(pLiteralLengthTable, FR_LITERAL_LENGTH_TABLE_BIT_LENGTH);
+			frFreeInflateTable(pDistanceTable, FR_DISTANCE_TABLE_BIT_LENGTH);
+			return FR_ERROR_CORRUPTED_FILE;
+		}
 
 		// End of block
 		if(literalLengthSymbol == 256) break;
@@ -695,7 +701,7 @@ static FrResult frInflateBlock(FrInflateData* pData)
 		memcpy(pData->pResult + pData->resultIterator, pData->pResult + pData->resultIterator - distanceSymbol, lengthDistanceRatio.rem);
 		pData->resultIterator += lengthDistanceRatio.rem;
 
-	} while(literalLengthSymbol != 256);
+	} while(true);
 
 	// Free literal/length and distance tables
 	frFreeInflateTable(pLiteralLengthTable, FR_LITERAL_LENGTH_TABLE_BIT_LENGTH);

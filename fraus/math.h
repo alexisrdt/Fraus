@@ -27,6 +27,13 @@ typedef union FrVec3
 	};
 } FrVec3;
 
+typedef struct FrVertex
+{
+	FrVec3 position;
+	FrVec2 textureCoordinates;
+	FrVec3 normal;
+} FrVertex;
+
 float frDot(const FrVec3* pFirst, const FrVec3* pSecond);
 void frNormalize(FrVec3* pVector);
 FrVec3 frCross(const FrVec3* pFirst, const FrVec3* pSecond);

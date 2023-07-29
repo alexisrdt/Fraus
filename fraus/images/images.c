@@ -168,7 +168,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 		}
 
 		// Read chunk type and data
-		uint8_t* pTypeAndData = (uint8_t*)malloc(length + 4);
+		uint8_t* pTypeAndData = malloc(length + 4);
 		if(!pTypeAndData)
 		{
 			free(pData);
@@ -230,14 +230,6 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 
-			pImage->pData = (uint8_t*)malloc(pImage->width * pImage->height * 3);
-			if(!pImage->pData)
-			{
-				free(pTypeAndData);
-				fclose(file);
-				return FR_ERROR_CORRUPTED_FILE;
-			}
-
 			// Read bit depth
 			bitDepth = pTypeAndData[12];
 
@@ -269,6 +261,15 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 					free(pTypeAndData);
 					fclose(file);
 					return FR_ERROR_CORRUPTED_FILE;
+			}
+
+			// Allocate data
+			pImage->pData = malloc(pImage->width * pImage->height * pImage->type);
+			if(!pImage->pData)
+			{
+				free(pTypeAndData);
+				fclose(file);
+				return FR_ERROR_CORRUPTED_FILE;
 			}
 
 			first = false;
@@ -461,8 +462,8 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 						pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] +
 						frPaeth(
 							j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j],
-							pImage->pData[pImage->width * pImage->type * (i - 1) + j],
-							j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * (i - 1) - 1) + j]
+							i == 0 ? 0 : (pImage->pData[pImage->width * pImage->type * (i - 1) + j]),
+							i == 0 ? 0 : (j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * (i - 1) - 1) + j])
 						);
 				}
 				break;
