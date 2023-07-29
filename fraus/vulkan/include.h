@@ -59,9 +59,14 @@ typedef struct FrVulkanData
 	void* pModelViewProjectionData;
 	VkDescriptorPool descriptorPool;
 	VkDescriptorSet descriptorSet;
+	uint32_t textureMipLevels;
 	VkImage textureImage;
 	VkDeviceMemory textureImageMemory;
 	VkImageView textureImageView;
+	VkSampleCountFlagBits msaaSamples;
+	VkImage colorImage;
+	VkDeviceMemory colorImageMemory;
+	VkImageView colorImageView;
 	VkImage depthImage;
 	VkDeviceMemory depthImageMemory;
 	VkImageView depthImageView;

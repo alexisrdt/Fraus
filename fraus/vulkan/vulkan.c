@@ -1,5 +1,6 @@
 #include "vulkan.h"
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -333,6 +334,18 @@ FrResult frChoosePhysicalDevice(FrVulkanData* pVulkanData)
 				pVulkanData->physicalDevice = pPhysicalDevices[i];
 				pVulkanData->queueFamily = j;
 
+				VkPhysicalDeviceProperties properties;
+				vkGetPhysicalDeviceProperties(pVulkanData->physicalDevice, &properties);
+
+				VkSampleCountFlags counts = properties.limits.framebufferColorSampleCounts & properties.limits.framebufferDepthSampleCounts;
+				if(counts & VK_SAMPLE_COUNT_64_BIT) pVulkanData->msaaSamples = VK_SAMPLE_COUNT_64_BIT;
+				else if(counts & VK_SAMPLE_COUNT_32_BIT) pVulkanData->msaaSamples = VK_SAMPLE_COUNT_32_BIT;
+				else if(counts & VK_SAMPLE_COUNT_16_BIT) pVulkanData->msaaSamples = VK_SAMPLE_COUNT_16_BIT;
+				else if(counts & VK_SAMPLE_COUNT_8_BIT) pVulkanData->msaaSamples = VK_SAMPLE_COUNT_8_BIT;
+				else if(counts & VK_SAMPLE_COUNT_4_BIT) pVulkanData->msaaSamples = VK_SAMPLE_COUNT_4_BIT;
+				else if(counts & VK_SAMPLE_COUNT_2_BIT) pVulkanData->msaaSamples = VK_SAMPLE_COUNT_2_BIT;
+				else pVulkanData->msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+
 				free(pQueueFamilyProperties);
 				free(pPhysicalDevices);
 
@@ -402,6 +415,7 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	VkPhysicalDeviceFeatures features, wantedFeatures = {VK_FALSE};
 	vkGetPhysicalDeviceFeatures(pVulkanData->physicalDevice, &features);
 	wantedFeatures.samplerAnisotropy = features.samplerAnisotropy;
+	wantedFeatures.sampleRateShading = features.sampleRateShading;
 
 	VkDeviceCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -499,6 +513,7 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdPipelineBarrier)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdCopyBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdCopyBufferToImage)
+	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBlitImage)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindVertexBuffers)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindIndexBuffer)
 	FR_LOAD_DEVICE_PFN(pVulkanData->device, vkCmdBindDescriptorSets)
@@ -551,7 +566,7 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	return FR_SUCCESS;
 }
 
-static FrResult frCreateImageView(FrVulkanData* pVulkanData, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, VkImageView* pImageView)
+static FrResult frCreateImageView(FrVulkanData* pVulkanData, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels, VkImageView* pImageView)
 {
 	VkImageViewCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -564,7 +579,7 @@ static FrResult frCreateImageView(FrVulkanData* pVulkanData, VkImage image, VkFo
 		.components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
 		.subresourceRange.aspectMask = aspectFlags,
 		.subresourceRange.baseMipLevel = 0,
-		.subresourceRange.levelCount = 1,
+		.subresourceRange.levelCount = mipLevels,
 		.subresourceRange.baseArrayLayer = 0,
 		.subresourceRange.layerCount = 1
 	};
@@ -681,7 +696,7 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 	pVulkanData->pImageViews = pNewImageViews;
 	for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
 	{
-		if(frCreateImageView(pVulkanData, pVulkanData->pImages[imageIndex], pVulkanData->format, VK_IMAGE_ASPECT_COLOR_BIT, &pVulkanData->pImageViews[imageIndex]) != FR_SUCCESS)
+		if(frCreateImageView(pVulkanData, pVulkanData->pImages[imageIndex], pVulkanData->format, VK_IMAGE_ASPECT_COLOR_BIT, 1, &pVulkanData->pImageViews[imageIndex]) != FR_SUCCESS)
 		{
 			for(uint32_t j = 0; j < imageIndex; ++j)
 			{
@@ -732,23 +747,33 @@ FrResult frCreateRenderPass(FrVulkanData* pVulkanData)
 	VkAttachmentDescription attachments[] = {
 		{
 			.format = pVulkanData->format,
-			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.samples = pVulkanData->msaaSamples,
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+			.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 		},
 		{
 			.format = VK_FORMAT_D24_UNORM_S8_UINT,
-			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.samples = pVulkanData->msaaSamples,
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 			.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 			.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+		},
+		{
+			.format = pVulkanData->format,
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+			.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
 		}
 	};
 
@@ -760,10 +785,15 @@ FrResult frCreateRenderPass(FrVulkanData* pVulkanData)
 		.attachment = 1,
 		.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 	};
+	VkAttachmentReference resolveAttachmentReference = {
+		.attachment = 2,
+		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+	};
 
 	VkSubpassDescription subpass = {
 		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
 		.colorAttachmentCount = 1,
+		.pResolveAttachments = &resolveAttachmentReference,
 		.pColorAttachments = &colorAttachmentReference,
 		.pDepthStencilAttachment = &depthAttachmentReference
 	};
@@ -814,8 +844,9 @@ FrResult frCreateFramebuffers(FrVulkanData* pVulkanData)
 	for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
 	{
 		VkImageView attachments[] = {
-			pVulkanData->pImageViews[imageIndex],
-			pVulkanData->depthImageView
+			pVulkanData->colorImageView,
+			pVulkanData->depthImageView,
+			pVulkanData->pImageViews[imageIndex]
 		};
 		VkFramebufferCreateInfo framebufferInfo = {
 			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -990,18 +1021,20 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 		.depthClampEnable = VK_FALSE,
 		.rasterizerDiscardEnable = VK_FALSE,
 		.polygonMode = VK_POLYGON_MODE_FILL,
-		// .cullMode = VK_CULL_MODE_BACK_BIT,
-		.cullMode = VK_CULL_MODE_NONE,
+		.cullMode = VK_CULL_MODE_BACK_BIT,
 		.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
 		.depthBiasEnable = VK_FALSE,
 		.lineWidth = 1.f
 	};
 
 	// Multisample
+	VkPhysicalDeviceFeatures features;
+	vkGetPhysicalDeviceFeatures(pVulkanData->physicalDevice, &features);
 	VkPipelineMultisampleStateCreateInfo multisample = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-		.rasterizationSamples = 1,
-		.sampleShadingEnable = VK_FALSE
+		.rasterizationSamples = pVulkanData->msaaSamples,
+		.sampleShadingEnable = features.sampleRateShading,
+		.minSampleShading = 0.2f
 	};
 
 	// Depth stencil
@@ -1439,7 +1472,7 @@ FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData)
 	return FR_SUCCESS;
 }
 
-static FrResult frTransitionImageLayout(FrVulkanData* pVulkanData, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout)
+static FrResult frTransitionImageLayout(FrVulkanData* pVulkanData, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
 {
 	VkCommandBuffer commandBuffer;
 	if (frBeginCommandBuffer(pVulkanData, &commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
@@ -1455,7 +1488,7 @@ static FrResult frTransitionImageLayout(FrVulkanData* pVulkanData, VkImage image
 		.image = image,
 		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 		.subresourceRange.baseMipLevel = 0,
-		.subresourceRange.levelCount = 1,
+		.subresourceRange.levelCount = mipLevels,
 		.subresourceRange.baseArrayLayer = 0,
 		.subresourceRange.layerCount = 1
 	};
@@ -1512,7 +1545,7 @@ static FrResult frCopyBufferToImage(FrVulkanData* pVulkanData, VkBuffer buffer, 
 	return FR_SUCCESS;
 }
 
-static FrResult frCreateImage(FrVulkanData* pVulkanData, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* pImage, VkDeviceMemory* pImageMemory)
+static FrResult frCreateImage(FrVulkanData* pVulkanData, uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits samples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* pImage, VkDeviceMemory* pImageMemory)
 {
 	// Create image
 	VkImageCreateInfo createInfo = {
@@ -1522,9 +1555,9 @@ static FrResult frCreateImage(FrVulkanData* pVulkanData, uint32_t width, uint32_
 		.extent.width = width,
 		.extent.height = height,
 		.extent.depth = 1,
-		.mipLevels = 1,
+		.mipLevels = mipLevels,
 		.arrayLayers = 1,
-		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.samples = samples,
 		.tiling = tiling,
 		.usage = usage,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -1565,6 +1598,78 @@ static FrResult frCreateImage(FrVulkanData* pVulkanData, uint32_t width, uint32_
 	return FR_SUCCESS;
 }
 
+static FrResult frGenerateMipmap(FrVulkanData* pVulkanData, VkImage image, VkFormat format, uint32_t width, uint32_t height, uint32_t mipLevels)
+{
+	VkFormatProperties formatProperties;
+	vkGetPhysicalDeviceFormatProperties(pVulkanData->physicalDevice, format, &formatProperties);
+	if(!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) return FR_ERROR_UNKNOWN;
+
+	VkCommandBuffer commandBuffer;
+	if(frBeginCommandBuffer(pVulkanData, &commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	VkImageMemoryBarrier barrier = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.image = image,
+		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.subresourceRange.levelCount = 1,
+		.subresourceRange.baseArrayLayer = 0,
+		.subresourceRange.layerCount = 1
+	};
+
+	uint32_t mipWidth = width;
+	uint32_t mipHeight = height;
+	for(uint32_t i = 1; i < mipLevels; ++i)
+	{
+		barrier.subresourceRange.baseMipLevel = i - 1;
+		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+
+		VkImageBlit blit = {
+			.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.srcSubresource.mipLevel = i - 1,
+			.srcSubresource.baseArrayLayer = 0,
+			.srcSubresource.layerCount = 1,
+			.srcOffsets[0] = {0, 0, 0},
+			.srcOffsets[1] = {mipWidth, mipHeight, 1},
+			.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.dstSubresource.mipLevel = i,
+			.dstSubresource.baseArrayLayer = 0,
+			.dstSubresource.layerCount = 1,
+			.dstOffsets[0] = {0, 0, 0},
+			.dstOffsets[1] = {mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1}
+		};
+		vkCmdBlitImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+
+		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+
+		if(mipWidth > 1) mipWidth /= 2;
+		if(mipHeight > 1) mipHeight /= 2;
+	}
+
+	barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+
+	if(frEndCommandBuffer(pVulkanData, commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	return FR_SUCCESS;
+}
+
 FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 {
 	// Load image
@@ -1592,6 +1697,12 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 		free(image.pData);
 		image.pData = pNewData;
 	}
+
+	// Compute mip levels
+	uint32_t maxDimension = image.width > image.height ? image.width : image.height;
+	maxDimension = maxDimension > 0 ? maxDimension : 1;
+	pVulkanData->textureMipLevels = 1;
+	while(maxDimension >>= 1) ++pVulkanData->textureMipLevels;
 
 	// Compute size
 	VkDeviceSize size = image.width * image.height * 4;
@@ -1630,9 +1741,11 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 		pVulkanData,
 		image.width,
 		image.height,
+		pVulkanData->textureMipLevels,
+		VK_SAMPLE_COUNT_1_BIT,
 		VK_FORMAT_R8G8B8A8_SRGB,
 		VK_IMAGE_TILING_OPTIMAL,
-		VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		&pVulkanData->textureImage,
 		&pVulkanData->textureImageMemory
@@ -1644,7 +1757,7 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 	}
 
 	// Copy data to image
-	if(frTransitionImageLayout(pVulkanData, pVulkanData->textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) != FR_SUCCESS)
+	if(frTransitionImageLayout(pVulkanData, pVulkanData->textureImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, pVulkanData->textureMipLevels) != FR_SUCCESS)
 	{
 		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
 		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
@@ -1662,7 +1775,8 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 		return FR_ERROR_UNKNOWN;
 	}
 
-	if(frTransitionImageLayout(pVulkanData, pVulkanData->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) != FR_SUCCESS)
+	// Mipmap
+	if(frGenerateMipmap(pVulkanData, pVulkanData->textureImage, VK_FORMAT_R8G8B8A8_SRGB, image.width, image.height, pVulkanData->textureMipLevels) != FR_SUCCESS)
 	{
 		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
 		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
@@ -1671,11 +1785,21 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 		return FR_ERROR_UNKNOWN;
 	}
 
+	// If no mipmap
+	/* if (frTransitionImageLayout(pVulkanData, pVulkanData->textureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, pVulkanData->textureMipLevels) != FR_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
+		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
+		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	} */
+
 	vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
 	vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 
 	// Create image view
-	if(frCreateImageView(pVulkanData, pVulkanData->textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, &pVulkanData->textureImageView) != FR_SUCCESS)
+	if(frCreateImageView(pVulkanData, pVulkanData->textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, pVulkanData->textureMipLevels, &pVulkanData->textureImageView) != FR_SUCCESS)
 	{
 		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
 		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
@@ -1701,7 +1825,7 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 		.compareEnable = VK_FALSE,
 		.compareOp = VK_COMPARE_OP_ALWAYS,
 		.minLod = 0.f,
-		.maxLod = 0.f,
+		.maxLod = VK_LOD_CLAMP_NONE,
 		.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
 		.unnormalizedCoordinates = VK_FALSE
 	};
@@ -1710,6 +1834,19 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData,const char* pPath)
 		vkDestroyImageView(pVulkanData->device, pVulkanData->textureImageView, NULL);
 		vkDestroyImage(pVulkanData->device, pVulkanData->textureImage, NULL);
 		vkFreeMemory(pVulkanData->device, pVulkanData->textureImageMemory, NULL);
+		return FR_ERROR_UNKNOWN;
+	}
+
+	return FR_SUCCESS;
+}
+
+FrResult frCreateColorImage(FrVulkanData* pVulkanData)
+{
+	if(frCreateImage(pVulkanData, pVulkanData->extent.width, pVulkanData->extent.height, 1, pVulkanData->msaaSamples, pVulkanData->format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &pVulkanData->colorImage, &pVulkanData->colorImageMemory) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(frCreateImageView(pVulkanData, pVulkanData->colorImage, pVulkanData->format, VK_IMAGE_ASPECT_COLOR_BIT, 1, &pVulkanData->colorImageView) != FR_SUCCESS)
+	{
+		vkDestroyImage(pVulkanData->device, pVulkanData->colorImage, NULL);
+		vkFreeMemory(pVulkanData->device, pVulkanData->colorImageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
@@ -1726,6 +1863,8 @@ FrResult frCreateDepthImage(FrVulkanData* pVulkanData)
 		pVulkanData,
 		pVulkanData->extent.width,
 		pVulkanData->extent.height,
+		1,
+		pVulkanData->msaaSamples,
 		VK_FORMAT_D24_UNORM_S8_UINT,
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -1734,7 +1873,7 @@ FrResult frCreateDepthImage(FrVulkanData* pVulkanData)
 		&pVulkanData->depthImageMemory
 	) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
-	if(frCreateImageView(pVulkanData, pVulkanData->depthImage, VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT, &pVulkanData->depthImageView) != FR_SUCCESS)
+	if(frCreateImageView(pVulkanData, pVulkanData->depthImage, VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT, 1, &pVulkanData->depthImageView) != FR_SUCCESS)
 	{
 		vkDestroyImage(pVulkanData->device, pVulkanData->depthImage, NULL);
 		vkFreeMemory(pVulkanData->device, pVulkanData->depthImageMemory, NULL);
@@ -1940,8 +2079,12 @@ FrResult frRecreateSwapchain(FrVulkanData* pVulkanData)
 	vkDestroyImageView(pVulkanData->device, pVulkanData->depthImageView, NULL);
 	vkDestroyImage(pVulkanData->device, pVulkanData->depthImage, NULL);
 	vkFreeMemory(pVulkanData->device, pVulkanData->depthImageMemory, NULL);
+	vkDestroyImageView(pVulkanData->device, pVulkanData->colorImageView, NULL);
+	vkDestroyImage(pVulkanData->device, pVulkanData->colorImage, NULL);
+	vkFreeMemory(pVulkanData->device, pVulkanData->colorImageMemory, NULL);
 
 	if(frCreateSwapchain(pVulkanData) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(frCreateColorImage(pVulkanData) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 	if(frCreateDepthImage(pVulkanData) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 	if(frCreateFramebuffers(pVulkanData) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
