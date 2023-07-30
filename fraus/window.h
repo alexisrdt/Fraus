@@ -42,6 +42,10 @@ typedef enum FrKey
 	FR_KEY_X,
 	FR_KEY_Y,
 	FR_KEY_Z,
+	FR_KEY_LEFT,
+	FR_KEY_RIGHT,
+	FR_KEY_UP,
+	FR_KEY_DOWN,
 	FR_KEY_UNKNOWN
 } FrKey;
 

@@ -1,6 +1,5 @@
 #include "vulkan.h"
 
-#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +7,7 @@
 #include <time.h>
 
 #include "functions.h"
+#include "utils.h"
 #include "../images/images.h"
 
 /*
@@ -1137,258 +1137,6 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 	return FR_SUCCESS;
 }
 
-static FrResult frFindMemoryTypeIndex(FrVulkanData* pVulkanData, uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* pIndex)
-{
-	VkPhysicalDeviceMemoryProperties memoryProperties;
-	vkGetPhysicalDeviceMemoryProperties(pVulkanData->physicalDevice, &memoryProperties);
-
-	uint32_t memoryTypeIndex;
-	for(memoryTypeIndex = 0; memoryTypeIndex < memoryProperties.memoryTypeCount; ++memoryTypeIndex)
-	{
-		if(
-			(typeBits & (1 << memoryTypeIndex)) &&
-			(memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & properties) == properties
-		) break;
-	}
-	if(memoryTypeIndex >= memoryProperties.memoryTypeCount) return FR_ERROR_UNKNOWN;
-
-	*pIndex = memoryTypeIndex;
-
-	return FR_SUCCESS;
-}
-
-static FrResult frCreateBuffer(FrVulkanData* pVulkanData, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* pBuffer, VkDeviceMemory* pBufferMemory)
-{
-	// Create buffer
-	VkBufferCreateInfo createInfo = {
-		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-		.size = size,
-		.usage = usage,
-		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
-	};
-
-	if(vkCreateBuffer(pVulkanData->device, &createInfo, NULL, pBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-	// Memory allocation
-	VkMemoryRequirements memoryRequirements;
-	vkGetBufferMemoryRequirements(pVulkanData->device, *pBuffer, &memoryRequirements);
-
-	uint32_t memoryTypeIndex;
-	if(frFindMemoryTypeIndex(pVulkanData, memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex) != FR_SUCCESS)
-	{
-		vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	VkMemoryAllocateInfo allocateInfo = {
-		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-		.allocationSize = memoryRequirements.size,
-		.memoryTypeIndex = memoryTypeIndex
-	};
-
-	if(vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, pBufferMemory) != VK_SUCCESS)
-	{
-		vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	if(vkBindBufferMemory(pVulkanData->device, *pBuffer, *pBufferMemory, 0) != VK_SUCCESS)
-	{
-		vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, *pBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	return FR_SUCCESS;
-}
-
-static FrResult frBeginCommandBuffer(FrVulkanData* pVulkanData, VkCommandBuffer* pCommandBuffer)
-{
-	// Create command buffer
-	VkCommandBufferAllocateInfo allocateInfo = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = pVulkanData->commandPool,
-		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-		.commandBufferCount = 1
-	};
-	if(vkAllocateCommandBuffers(pVulkanData->device, &allocateInfo, pCommandBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-	// Begin command buffer
-	VkCommandBufferBeginInfo beginInfo = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-	};
-	if(vkBeginCommandBuffer(*pCommandBuffer, &beginInfo) != VK_SUCCESS)
-	{
-		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, pCommandBuffer);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	return FR_SUCCESS;
-}
-
-static FrResult frEndCommandBuffer(FrVulkanData* pVulkanData, VkCommandBuffer commandBuffer)
-{
-	// End command buffer
-	if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-	{
-		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	// Submit to queue
-	VkSubmitInfo submitInfo = {
-		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.commandBufferCount = 1,
-		.pCommandBuffers = &commandBuffer
-	};
-	if(vkQueueSubmit(pVulkanData->queue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
-	{
-		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	// Wait idle
-	if(vkQueueWaitIdle(pVulkanData->queue) != VK_SUCCESS)
-	{
-		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	// Free command buffer
-	vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPool, 1, &commandBuffer);
-
-	return FR_SUCCESS;
-}
-
-static FrResult frCopyBuffer(FrVulkanData* pVulkanData, VkBuffer sourceBuffer, VkBuffer destinationBuffer, VkDeviceSize size)
-{
-	// Create command buffer
-	VkCommandBuffer commandBuffer;
-	if(frBeginCommandBuffer(pVulkanData, &commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
-
-	// Copy buffer
-	VkBufferCopy region = {
-		.size = size
-	};
-	vkCmdCopyBuffer(commandBuffer, sourceBuffer, destinationBuffer, 1, &region);
-
-	// End command buffer
-	if(frEndCommandBuffer(pVulkanData, commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
-
-	return FR_SUCCESS;
-}
-
-FrResult frCreateVertexBuffer(FrVulkanData* pVulkanData, FrVertex* pVertices, uint32_t vertexCount)
-{
-	// Compute size
-	VkDeviceSize size = vertexCount * sizeof(FrVertex);
-
-	// Create staging buffer
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingBufferMemory;
-
-	if(frCreateBuffer(
-		pVulkanData,
-		size,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		&stagingBuffer,
-		&stagingBufferMemory
-	) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
-
-	// Upload data to device
-	void* pData;
-	if(vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData) != VK_SUCCESS)
-	{
-		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
-	}
-	memcpy(pData, pVertices, size);
-	vkUnmapMemory(pVulkanData->device, stagingBufferMemory);
-
-	// Create vertex buffer
-	if(frCreateBuffer(
-		pVulkanData,
-		size,
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		&pVulkanData->vertexBuffer,
-		&pVulkanData->vertexBufferMemory
-	) != FR_SUCCESS)
-	{
-		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	// Copy data to vertex buffer
-	frCopyBuffer(pVulkanData, stagingBuffer, pVulkanData->vertexBuffer, size);
-	pVulkanData->vertexCount = vertexCount;
-
-	// Destroy staging buffer
-	vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-	vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
-
-	return FR_SUCCESS;
-}
-
-FrResult frCreateIndexBuffer(FrVulkanData* pVulkanData, uint32_t* pIndexes, uint32_t indexCount)
-{
-	// Compute size
-	VkDeviceSize size = indexCount * sizeof(uint32_t);
-
-	// Create staging buffer
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingBufferMemory;
-
-	if(frCreateBuffer(
-		pVulkanData,
-		size,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		&stagingBuffer,
-		&stagingBufferMemory
-	) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
-
-	// Upload data to device
-	void* pData;
-	if(vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData) != VK_SUCCESS)
-	{
-		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
-	}
-	memcpy(pData, pIndexes, size);
-	vkUnmapMemory(pVulkanData->device, stagingBufferMemory);
-
-	// Create index buffer
-	if(frCreateBuffer(
-		pVulkanData,
-		size,
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		&pVulkanData->indexBuffer,
-		&pVulkanData->indexBufferMemory
-	) != FR_SUCCESS)
-	{
-		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
-	}
-
-	// Copy data to vertex buffer
-	frCopyBuffer(pVulkanData, stagingBuffer, pVulkanData->indexBuffer, size);
-	pVulkanData->indexCount = indexCount;
-
-	// Destroy staging buffer
-	vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-	vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
-
-	return FR_SUCCESS;
-}
-
 FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData)
 {
 	// Compute size
@@ -2000,9 +1748,9 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 	vkCmdBindPipeline(pVulkanData->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pVulkanData->graphicsPipeline);
 
 	VkDeviceSize offsets[] = {0};
-	vkCmdBindVertexBuffers(pVulkanData->commandBuffer, 0, 1, &pVulkanData->vertexBuffer, offsets);
+	vkCmdBindVertexBuffers(pVulkanData->commandBuffer, 0, 1, &pVulkanData->object.buffer, offsets);
 
-	vkCmdBindIndexBuffer(pVulkanData->commandBuffer, pVulkanData->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(pVulkanData->commandBuffer, pVulkanData->object.buffer, pVulkanData->object.vertexCount * sizeof(FrVertex), VK_INDEX_TYPE_UINT32);
 
 	VkViewport viewport = {
 		.x = 0.f,
@@ -2031,7 +1779,7 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 	vkCmdBindDescriptorSets(pVulkanData->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pVulkanData->pipelineLayout, 0, 1, &pVulkanData->descriptorSet, 0, NULL);
 
 	// vkCmdDraw(pVulkanData->commandBuffer, pVulkanData->vertexCount, 1, 0, 0);
-	vkCmdDrawIndexed(pVulkanData->commandBuffer, pVulkanData->indexCount, 1, 0, 0, 0);
+	vkCmdDrawIndexed(pVulkanData->commandBuffer, pVulkanData->object.indexCount, 1, 0, 0, 0);
 
 	vkCmdEndRenderPass(pVulkanData->commandBuffer);
 

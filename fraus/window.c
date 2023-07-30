@@ -46,6 +46,11 @@ static FrKey frWin32VirtualKeyToFrKey(WPARAM virtualKey)
 		case 0x59: return FR_KEY_Y;
 		case 0x5A: return FR_KEY_Z;
 
+		case VK_LEFT: return FR_KEY_LEFT;
+		case VK_RIGHT: return FR_KEY_RIGHT;
+		case VK_UP: return FR_KEY_UP;
+		case VK_DOWN: return FR_KEY_DOWN;
+
 		default: return FR_KEY_UNKNOWN;
 	}
 }

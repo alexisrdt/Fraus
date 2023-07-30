@@ -24,6 +24,14 @@ typedef struct FrModelViewProjection
 typedef struct FrVulkanData FrVulkanData;
 typedef void(*FrUpdateHandler)(FrVulkanData* pVulkanData, float elapsed, void* pUserData);
 
+typedef struct FrVulkanObject
+{
+	VkDeviceMemory memory;
+	VkBuffer buffer;
+	uint32_t vertexCount;
+	uint32_t indexCount;
+} FrVulkanObject;
+
 typedef struct FrVulkanData
 {
 	VkInstance instance;
@@ -48,12 +56,7 @@ typedef struct FrVulkanData
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;
-	uint32_t vertexCount;
-	VkBuffer vertexBuffer;
-	VkDeviceMemory vertexBufferMemory;
-	uint32_t indexCount;
-	VkBuffer indexBuffer;
-	VkDeviceMemory indexBufferMemory;
+	FrVulkanObject object;
 	VkBuffer modelViewProjectionBuffer;
 	VkDeviceMemory modelViewProjectionBufferMemory;
 	void* pModelViewProjectionData;
