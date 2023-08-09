@@ -46,6 +46,7 @@ typedef enum FrKey
 	FR_KEY_RIGHT,
 	FR_KEY_UP,
 	FR_KEY_DOWN,
+	FR_KEY_ESCAPE,
 	FR_KEY_UNKNOWN
 } FrKey;
 
@@ -100,6 +101,12 @@ typedef struct FrWindow
  * - pWindow: pointer to a handle for the window
  */
 FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow);
+
+/*
+ * Close a window
+ * - pWindow: pointer to the window
+ */
+void frCloseWindow(FrWindow* pWindow);
 
 /* Handlers */
 

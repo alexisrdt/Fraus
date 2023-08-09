@@ -273,8 +273,6 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			}
 
 			first = false;
-
-			continue;
 		}
 
 		// Check IHDR chunk was encountered

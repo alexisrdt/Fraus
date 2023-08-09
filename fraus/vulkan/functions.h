@@ -32,7 +32,6 @@ FR_DECLARE_PFN(vkDestroyInstance)
 #ifndef NDEBUG
 FR_DECLARE_PFN(vkCreateDebugUtilsMessengerEXT)
 FR_DECLARE_PFN(vkDestroyDebugUtilsMessengerEXT)
-FR_DECLARE_PFN(vkSetDebugUtilsObjectNameEXT)
 #endif
 FR_DECLARE_PFN(vkEnumeratePhysicalDevices)
 FR_DECLARE_PFN(vkGetPhysicalDeviceProperties)

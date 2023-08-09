@@ -262,7 +262,6 @@ FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVu
 	{
 		FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkCreateDebugUtilsMessengerEXT)
 		FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkDestroyDebugUtilsMessengerEXT)
-		FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkSetDebugUtilsObjectNameEXT)
 	}
 #endif
 	FR_LOAD_INSTANCE_PFN(pVulkanData->instance, vkGetPhysicalDeviceSurfaceSupportKHR)
@@ -525,44 +524,6 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 
 	vkGetDeviceQueue(pVulkanData->device, pVulkanData->queueFamily, 0, &pVulkanData->queue);
 
-#ifndef NDEBUG
-	if(pVulkanData->debugExtensionAvailable)
-	{
-		VkDebugUtilsObjectNameInfoEXT nameInfo = {
-			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			.objectType = VK_OBJECT_TYPE_INSTANCE,
-			.objectHandle = (uint64_t)pVulkanData->instance,
-			.pObjectName = "Fraus instance"
-		};
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-		nameInfo.objectType = VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT;
-		nameInfo.objectHandle = (uint64_t)pVulkanData->messenger;
-		nameInfo.pObjectName = "Fraus messenger";
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-		nameInfo.objectType = VK_OBJECT_TYPE_PHYSICAL_DEVICE;
-		nameInfo.objectHandle = (uint64_t)pVulkanData->physicalDevice;
-		nameInfo.pObjectName = "Fraus physical device";
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-		nameInfo.objectType = VK_OBJECT_TYPE_SURFACE_KHR;
-		nameInfo.objectHandle = (uint64_t)pVulkanData->surface;
-		nameInfo.pObjectName = "Fraus surface";
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-		nameInfo.objectType = VK_OBJECT_TYPE_DEVICE;
-		nameInfo.objectHandle = (uint64_t)pVulkanData->device;
-		nameInfo.pObjectName = "Fraus device";
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-		nameInfo.objectType = VK_OBJECT_TYPE_QUEUE;
-		nameInfo.objectHandle = (uint64_t)pVulkanData->queue;
-		nameInfo.pObjectName = "Fraus queue";
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-	}
-#endif
-
 	return FR_SUCCESS;
 }
 
@@ -710,35 +671,6 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 		}
 	}
 
-#ifndef NDEBUG
-	if(pVulkanData->debugExtensionAvailable)
-	{
-		VkDebugUtilsObjectNameInfoEXT nameInfo = {
-			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			.objectType = VK_OBJECT_TYPE_SWAPCHAIN_KHR,
-			.objectHandle = (uint64_t)pVulkanData->swapchain,
-			.pObjectName = "Fraus swapchain"
-		};
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-		char pObjectName[64];
-		for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
-		{
-			sprintf(pObjectName, "Fraus image #%u", imageIndex);
-			nameInfo.objectType = VK_OBJECT_TYPE_IMAGE;
-			nameInfo.objectHandle = (uint64_t)pVulkanData->pImages[imageIndex];
-			nameInfo.pObjectName = pObjectName;
-			if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-			sprintf(pObjectName, "Fraus image view #%u", imageIndex);
-			nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
-			nameInfo.objectHandle = (uint64_t)pVulkanData->pImageViews[imageIndex];
-			nameInfo.pObjectName = pObjectName;
-			if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-		}
-	}
-#endif
-
 	return FR_SUCCESS;
 }
 
@@ -819,19 +751,6 @@ FrResult frCreateRenderPass(FrVulkanData* pVulkanData)
 
 	if(vkCreateRenderPass(pVulkanData->device, &createInfo, NULL, &pVulkanData->renderPass) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
-#ifndef NDEBUG
-	if(pVulkanData->debugExtensionAvailable)
-	{
-		VkDebugUtilsObjectNameInfoEXT nameInfo = {
-			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			.objectType = VK_OBJECT_TYPE_RENDER_PASS,
-			.objectHandle = (uint64_t)pVulkanData->renderPass,
-			.pObjectName = "Fraus render pass"
-		};
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-	}
-#endif
-
 	return FR_SUCCESS;
 }
 
@@ -869,24 +788,6 @@ FrResult frCreateFramebuffers(FrVulkanData* pVulkanData)
 			return FR_ERROR_UNKNOWN;
 		}
 	}
-
-#ifndef NDEBUG
-	if(pVulkanData->debugExtensionAvailable)
-	{
-		VkDebugUtilsObjectNameInfoEXT nameInfo = {
-			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			.objectType = VK_OBJECT_TYPE_FRAMEBUFFER
-		};
-		char pObjectName[64];
-		for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
-		{
-			sprintf(pObjectName, "Fraus framebuffer #%u", imageIndex);
-			nameInfo.objectHandle = (uint64_t)pVulkanData->pFramebuffers[imageIndex];
-			nameInfo.pObjectName = pObjectName;
-			if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-		}
-	}
-#endif
 
 	return FR_SUCCESS;
 }
@@ -1639,19 +1540,6 @@ FrResult frCreateCommandPool(FrVulkanData* pVulkanData)
 	};
 	if(vkCreateCommandPool(pVulkanData->device, &createInfo, NULL, &pVulkanData->commandPool) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
-#ifndef NDEBUG
-	if(pVulkanData->debugExtensionAvailable)
-	{
-		VkDebugUtilsObjectNameInfoEXT nameInfo = {
-			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			.objectType = VK_OBJECT_TYPE_COMMAND_POOL,
-			.objectHandle = (uint64_t)pVulkanData->commandPool,
-			.pObjectName = "Fraus command pool"
-		};
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-	}
-#endif
-
 	VkCommandBufferAllocateInfo allocateInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 		.commandPool = pVulkanData->commandPool,
@@ -1659,19 +1547,6 @@ FrResult frCreateCommandPool(FrVulkanData* pVulkanData)
 		.commandBufferCount = 1
 	};
 	if(vkAllocateCommandBuffers(pVulkanData->device, &allocateInfo, &pVulkanData->commandBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-#ifndef NDEBUG
-	if(pVulkanData->debugExtensionAvailable)
-	{
-		VkDebugUtilsObjectNameInfoEXT nameInfo = {
-			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER,
-			.objectHandle = (uint64_t)pVulkanData->commandBuffer,
-			.pObjectName = "Fraus command buffer"
-		};
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-	}
-#endif
 
 	VkSemaphoreCreateInfo semaphoreCreateInfo = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
@@ -1684,27 +1559,6 @@ FrResult frCreateCommandPool(FrVulkanData* pVulkanData)
 	if(vkCreateSemaphore(pVulkanData->device, &semaphoreCreateInfo, NULL, &pVulkanData->renderFinishedSemaphore) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	if(vkCreateFence(pVulkanData->device, &fenceCreateInfo, NULL, &pVulkanData->frameInFlightFence) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
-#ifndef NDEBUG
-	if(pVulkanData->debugExtensionAvailable)
-	{
-		VkDebugUtilsObjectNameInfoEXT nameInfo = {
-			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			.objectType = VK_OBJECT_TYPE_SEMAPHORE,
-			.objectHandle = (uint64_t)pVulkanData->imageAvailableSemaphore,
-			.pObjectName = "Fraus image available semaphore"
-		};
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-		nameInfo.objectHandle = (uint64_t)pVulkanData->renderFinishedSemaphore;
-		nameInfo.pObjectName = "Fraus render finished semaphore";
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-
-		nameInfo.objectType = VK_OBJECT_TYPE_FENCE;
-		nameInfo.objectHandle = (uint64_t)pVulkanData->frameInFlightFence;
-		nameInfo.pObjectName = "Fraus frame in flight fence";
-		if(vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
-	}
-#endif
 	return FR_SUCCESS;
 }
 

@@ -4,6 +4,9 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#ifndef NDEBUG
+#include <crtdbg.h>
+#endif
 
 static HMODULE vulkanLibrary;
 #endif
@@ -34,6 +37,19 @@ FrResult frFinish()
 #ifdef _WIN32
 
 	if(!FreeLibrary(vulkanLibrary)) return FR_ERROR_UNKNOWN;
+
+#ifndef NDEBUG
+	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+	_CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDOUT);
+
+	_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+	_CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDOUT);
+
+	_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+	_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDOUT);
+
+	_CrtDumpMemoryLeaks();
+#endif
 
 #endif
 

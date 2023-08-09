@@ -51,6 +51,8 @@ static FrKey frWin32VirtualKeyToFrKey(WPARAM virtualKey)
 		case VK_UP: return FR_KEY_UP;
 		case VK_DOWN: return FR_KEY_DOWN;
 
+		case VK_ESCAPE: return FR_KEY_ESCAPE;
+
 		default: return FR_KEY_UNKNOWN;
 	}
 }
@@ -94,11 +96,12 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 			break;
 
 		case WM_CLOSE:
-			RemoveProp(handle, TEXT("FrWindow"));
 			DestroyWindow(handle);
 			break;
 
 		case WM_DESTROY:
+			RemoveProp(handle, TEXT("FrWindow"));
+
 			--windowCount;
 			if(windowCount == 0) PostQuitMessage(EXIT_SUCCESS);
 			break;
@@ -168,6 +171,15 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
 #endif
 
 	return FR_SUCCESS;
+}
+
+/*
+ * Close a window
+ * - pWindow: pointer to the window
+ */
+void frCloseWindow(FrWindow* pWindow)
+{
+	DestroyWindow(pWindow->handle);
 }
 
 /* Handlers */
