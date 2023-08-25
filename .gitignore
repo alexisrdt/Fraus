@@ -13,3 +13,7 @@
 # Except Fraus
 !/fraus
 !/fraus/**
+
+# Except Pages
+!/pages
+!/pages/**
