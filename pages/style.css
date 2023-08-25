@@ -1,11 +1,77 @@
+/* Define some variables */
+:root {
+	--main-background-color: #333333;
+	--main-text-color: #e6e6e6;
+
+	--main-link-color: #66C4FF;
+	--hover-linkk-color: #9BFF94;
+
+	--header-background-color: #212121;
+
+	--footer-background-color: #212121;
+}
+
 /* General rules */
 * {
 	font-family: Arial, sans-serif;
-	font-size: 16px;
+	font-size: 20px;
 }
 
 body {
 	margin: 0;
+
+	background-color: var(--main-background-color);
+	color: var(--main-text-color);
+}
+
+a {
+	color: var(--main-link-color);
+	text-decoration: none;
+
+	transition: color 0.2s ease-in-out;
+}
+
+a:hover {
+	color: var(--hover-linkk-color);
+}
+
+/* Header navbar */
+nav {
+	background-color: var(--header-background-color);
+	color: var(--main-text-color);
+}
+
+nav ul {
+	display: flex;
+	justify-content: space-evenly;
+
+	margin: 0;
+	padding: 0;
+
+	list-style-type: none;
+}
+
+nav ul li {
+	width: 100%;
+
+	text-align: center;
+	font-family: 'Times New Roman', Times, serif;
+	font-size: 2em;
+
+	border-right: 1px solid var(--main-text-color);
+}
+
+nav ul li:last-child {
+	border-right: none;
+}
+
+nav ul li a {
+	display: block;
+	width: 100%;
+
+	text-decoration: none;
+	font: inherit;
+	color: inherit;
 }
 
 /* Main content */
@@ -22,5 +88,32 @@ body {
 }
 
 .fade-in {
-	animation: fade-in 0.5s ease-in-out;
+	animation: 1s fade-in 0s 1 ease-in-out;
+}
+
+h1, h2 {
+	margin: 0;
+
+	font-family: 'Times New Roman', Times, serif;
+}
+
+h1 {
+	text-align: center;
+	font-size: 5em;
+	
+	opacity: 1;
+}
+
+h2 {
+	font-size: 2em;
+}
+
+section {
+	padding: 1em;
+}
+
+/* Footer */
+footer {
+	background-color: var(--footer-background-color);
+	color: var(--main-text-color);
 }
