@@ -11,7 +11,7 @@
 static HMODULE vulkanLibrary;
 #endif
 
-FrResult frInit()
+FrResult frInit(void)
 {
 
 #ifdef _WIN32
@@ -31,7 +31,7 @@ FrResult frInit()
 	return FR_SUCCESS;
 }
 
-FrResult frFinish()
+FrResult frFinish(void)
 {
 
 #ifdef _WIN32
@@ -60,6 +60,7 @@ FrResult frFinish()
  * Main loop of the program
  * - pVulkanData: pointer to a the Vulkan Data
  */
+#include <stdio.h>
 int frMainLoop(FrVulkanData* pVulkanData)
 {
 #ifdef _WIN32
@@ -91,11 +92,16 @@ int frMainLoop(FrVulkanData* pVulkanData)
 			GetClientRect(pVulkanData->window.handle, &clientRect);
 			if(clientRect.right > 0 && clientRect.bottom > 0)
 			{
-				frRecreateSwapchain(pVulkanData);
+				if(frRecreateSwapchain(pVulkanData) != FR_SUCCESS)
+				{
+					returnValue = EXIT_FAILURE;
+					goto end;
+				}
+
 				if(frDrawFrame(pVulkanData) != FR_SUCCESS)
 				{
 					returnValue = EXIT_FAILURE;
-					break;
+					goto end;
 				}
 			}
 		}
@@ -104,7 +110,7 @@ int frMainLoop(FrVulkanData* pVulkanData)
 			if(frDrawFrame(pVulkanData) != FR_SUCCESS)
 			{
 				returnValue = EXIT_FAILURE;
-				break;
+				goto end;
 			}
 		}
 	}

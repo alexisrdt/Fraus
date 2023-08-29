@@ -13,7 +13,7 @@
 #include "vulkan/vulkan.h"
 #include "window.h"
 
-FrResult frInit();
+FrResult frInit(void);
 
 /*
  * Main loop of the program
@@ -21,7 +21,7 @@ FrResult frInit();
  */
 int frMainLoop(FrVulkanData* pVulkanData);
 
-FrResult frFinish();
+FrResult frFinish(void);
 
 
 #endif

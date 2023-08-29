@@ -462,6 +462,9 @@ static FrResult frInflateBlock(FrInflateData* pData)
 		{
 			pLiteralLengthSymbolLength[symbol] = 8;
 		}
+		pLiteralLengthLengthCount[7] = 24;
+		pLiteralLengthLengthCount[8] = 152;
+		pLiteralLengthLengthCount[9] = 112;
 		literalLengthMaxLength = 9;
 
 		// Create distance data
@@ -469,6 +472,7 @@ static FrResult frInflateBlock(FrInflateData* pData)
 		{
 			pDistanceSymbolLength[symbol] = 5;
 		}
+		pDistanceLengthCount[5] = 32;
 		distanceMaxLength = 5;
 	}
 

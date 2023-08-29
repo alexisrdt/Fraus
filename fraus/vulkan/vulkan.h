@@ -17,7 +17,7 @@ FrResult frCreateFramebuffers(FrVulkanData* pVulkanData);
 FrResult frCreateShaderModule(FrVulkanData* pVulkanData, const char* pPath, VkShaderModule* pShaderModule);
 FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData);
 FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData);
-FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath);
+FrResult frCreateSampler(FrVulkanData* pVulkanData);
 FrResult frCreateColorImage(FrVulkanData* pVulkanData);
 FrResult frCreateDepthImage(FrVulkanData* pVulkanData);
 FrResult frCreateCommandPool(FrVulkanData* pVulkanData);

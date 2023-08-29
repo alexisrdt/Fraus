@@ -42,7 +42,7 @@ typedef pthread_cond_t FrConditionVariable;
 
 /* Thread */
 
-uint32_t frGetNumberOfLogicalCores();
+uint32_t frGetNumberOfLogicalCores(void);
 
 FrResult frCreateThread(FrThread* pThread, FrThreadProc proc, void* pArg);
 FrResult frJoinThread(FrThread thread, int* pReturnValue);

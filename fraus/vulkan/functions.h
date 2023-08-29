@@ -45,6 +45,8 @@ FR_DECLARE_PFN(vkGetPhysicalDeviceSurfacePresentModesKHR)
 FR_DECLARE_PFN(vkGetPhysicalDeviceSurfaceSupportKHR)
 #ifdef _WIN32
 FR_DECLARE_PFN(vkCreateWin32SurfaceKHR)
+#else
+FR_DECLARE_PFN(vkCreateXlibSurfaceKHR)
 #endif
 FR_DECLARE_PFN(vkDestroySurfaceKHR)
 FR_DECLARE_PFN(vkGetDeviceProcAddr)
@@ -117,6 +119,7 @@ FR_DECLARE_PFN(vkCmdBlitImage)
 FR_DECLARE_PFN(vkCmdBindVertexBuffers)
 FR_DECLARE_PFN(vkCmdBindIndexBuffer)
 FR_DECLARE_PFN(vkCmdBindDescriptorSets)
+FR_DECLARE_PFN(vkCmdPushConstants)
 FR_DECLARE_PFN(vkCmdSetViewport)
 FR_DECLARE_PFN(vkCmdSetScissor)
 FR_DECLARE_PFN(vkCmdDraw)

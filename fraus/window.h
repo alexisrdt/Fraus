@@ -16,6 +16,9 @@
 // Keyboard key enum
 typedef enum FrKey
 {
+	FR_KEY_LEFT_MOUSE,
+	FR_KEY_RIGHT_MOUSE,
+
 	FR_KEY_A,
 	FR_KEY_B,
 	FR_KEY_C,
@@ -42,19 +45,29 @@ typedef enum FrKey
 	FR_KEY_X,
 	FR_KEY_Y,
 	FR_KEY_Z,
+
 	FR_KEY_LEFT,
 	FR_KEY_RIGHT,
 	FR_KEY_UP,
 	FR_KEY_DOWN,
+
+	FR_KEY_SPACE,
+
+	FR_KEY_LEFT_CONTROL,
+	FR_KEY_RIGHT_CONTROL,
+	FR_KEY_LEFT_SHIFT,
+	FR_KEY_RIGHT_SHIFT,
+
 	FR_KEY_ESCAPE,
+
 	FR_KEY_UNKNOWN
 } FrKey;
 
-typedef enum FrKeyStatus
+typedef enum FrKeyState
 {
-	FR_KEY_STATUS_DOWN,
-	FR_KEY_STATUS_UP,
-} FrKeyStatus;
+	FR_KEY_STATE_DOWN,
+	FR_KEY_STATE_UP,
+} FrKeyState;
 
 // Mouse button enum
 typedef enum FrMouseButton
@@ -64,9 +77,9 @@ typedef enum FrMouseButton
 } FrMouseButton;
 
 // Handlers
-typedef void(*FrMouseMoveHandler)(uint16_t x, uint16_t y, void* pUserData);
+typedef void(*FrMouseMoveHandler)(int32_t dx, int32_t dy, void* pUserData);
 typedef void(*FrClickHandler)(FrMouseButton button, void* pUserData);
-typedef void(*FrKeyHandler)(FrKey key, FrKeyStatus status, void* pUserData);
+typedef void(*FrKeyHandler)(FrKey key, FrKeyState state, void* pUserData);
 typedef void(*FrResizeHandler)(uint16_t newWidth, uint16_t newHeight, void* pUserData);
 
 typedef struct FrEventHandlers
@@ -107,6 +120,12 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow);
  * - pWindow: pointer to the window
  */
 void frCloseWindow(FrWindow* pWindow);
+
+/*
+ * Get the state of a key
+ * - key: the key
+ */
+FrKeyState frGetKeyState(FrKey key);
 
 /* Handlers */
 

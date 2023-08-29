@@ -3,6 +3,7 @@
 
 #include "include.h"
 
-FrResult frCreateObject(FrVulkanData* pVulaknData, FrVertex* pVertices, uint32_t vertexCount, uint32_t* pIndexes, uint32_t indexCount, FrVulkanObject* pVulkanObject);
+FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, const char* pTexturePath);
+void frDestroyObject(FrVulkanData* pVulkanData, FrVulkanObject* pObject);
 
 #endif

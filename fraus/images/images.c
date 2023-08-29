@@ -11,14 +11,14 @@
 (((bytes)[0] << 8) | (bytes)[1])
 
 #define FR_MSBF_TO_U32(bytes) \
-(((bytes)[0] << 24) | ((bytes)[1] << 16) | ((bytes)[2] << 8) | (bytes)[3])
+(uint32_t)(((bytes)[0] << 24) | ((bytes)[1] << 16) | ((bytes)[2] << 8) | (bytes)[3])
 
 #define FR_REVERSE_BYTE(byte) \
 (((byte & 1) << 7) | ((byte & 2) << 5) | ((byte & 4) << 3) | ((byte & 8) << 1) | ((byte & 16) >> 1) | ((byte & 32) >> 3) | ((byte & 64) >> 5) | ((byte & 128) >> 7))
 
 static uint32_t frCRC(const uint8_t* pData, uint32_t size)
 {
-	const uint32_t pCRCTable[256] = {
+	static const uint32_t pCRCTable[256] = {
 		0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA,
 		0x076DC419, 0x706AF48F, 0xE963A535, 0x9E6495A3,
 		0x0EDB8832, 0x79DCB8A4, 0xE0D5E91E, 0x97D2D988,
@@ -89,7 +89,7 @@ static uint32_t frCRC(const uint8_t* pData, uint32_t size)
 
 	while(size--)
 	{
-		CRC = pCRCTable[(CRC & 0xFF) ^ *(pData++)] ^ (CRC >> 8);
+		CRC = pCRCTable[(CRC & 0xFF) ^ *pData++] ^ (CRC >> 8);
 	}
 
 	return ~CRC;
@@ -99,9 +99,9 @@ static uint8_t frPaeth(uint8_t a, uint8_t b, uint8_t c)
 {
 	const int16_t p = a + b - c;
 
-	const int16_t pa = abs(p - a);
-	const int16_t pb = abs(p - b);
-	const int16_t pc = abs(p - c);
+	const int16_t pa = (int16_t)abs(p - a);
+	const int16_t pb = (int16_t)abs(p - b);
+	const int16_t pc = (int16_t)abs(p - c);
 
 	if(pa <= pb && pa <= pc) return a;
 	if(pb <= pc) return b;
@@ -110,9 +110,6 @@ static uint8_t frPaeth(uint8_t a, uint8_t b, uint8_t c)
 
 FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 {
-	// Check invalid arguments
-	if(!pPath || !pImage) return FR_ERROR_INVALID_ARGUMENT;
-
 	// Open file
 	FILE* file = fopen(pPath, "rb");
 	if(!file) return errno == ENOENT ? FR_ERROR_FILE_NOT_FOUND : FR_ERROR_UNKNOWN;
@@ -145,6 +142,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 	bool dataChunksFinished = false;
 	uint8_t bitDepth;
 	uint8_t* pData = NULL;
+	uint8_t* pTypeAndData = NULL;
 	size_t dataSize = 0;
 
 	// Loop through PNG chunks
@@ -154,6 +152,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 		uint8_t pLengthBuffer[4];
 		if(fread(pLengthBuffer, 1, 4, file) != 4)
 		{
+			free(pTypeAndData);
 			free(pData);
 			fclose(file);
 			if (getc(file) == EOF) return FR_ERROR_CORRUPTED_FILE;
@@ -162,19 +161,22 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 		uint32_t length = FR_MSBF_TO_U32(pLengthBuffer);
 		if(length >= (1 << 0x1F))
 		{
+			free(pTypeAndData);
 			free(pData);
 			fclose(file);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
 		// Read chunk type and data
-		uint8_t* pTypeAndData = malloc(length + 4);
-		if(!pTypeAndData)
+		uint8_t* pNewTypeAndData = realloc(pTypeAndData, length + 4);
+		if(!pNewTypeAndData)
 		{
+			free(pTypeAndData);
 			free(pData);
 			fclose(file);
 			return FR_ERROR_UNKNOWN;
 		}
+		pTypeAndData = pNewTypeAndData;
 		if(fread(pTypeAndData, 1, length + 4, file) != length + 4)
 		{
 			free(pTypeAndData);
@@ -336,14 +338,10 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 
-			free(pTypeAndData);
-
 			break;
 		}
-
-		// Free chunk data
-		free(pTypeAndData);
 	}
+	free(pTypeAndData);
 
 	// Close file
 	fclose(file);
@@ -376,7 +374,6 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 		free(pData);
 		return FR_ERROR_CORRUPTED_FILE;
 	}
-	uint16_t window = 1 << (encoded_window + 8);
 
 	// Check preset dictionnary
 	if(pData[1] & 0x20)
@@ -432,7 +429,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 1:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + (j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j]);
+					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + (j < (uint32_t)pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j]);
 				}
 				break;
 
@@ -448,7 +445,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 3:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + ((j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j]) + pImage->pData[pImage->width * pImage->type * (i - 1) + j]) / 2;
+					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + ((j < (uint32_t)pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j]) + pImage->pData[pImage->width * pImage->type * (i - 1) + j]) / 2;
 				}
 				break;
 
@@ -459,9 +456,9 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 					pImage->pData[pImage->width * pImage->type * i + j] =
 						pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] +
 						frPaeth(
-							j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j],
+							j < (uint32_t)pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j],
 							i == 0 ? 0 : (pImage->pData[pImage->width * pImage->type * (i - 1) + j]),
-							i == 0 ? 0 : (j < pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * (i - 1) - 1) + j])
+							i == 0 ? 0 : (j < (uint32_t)pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * (i - 1) - 1) + j])
 						);
 				}
 				break;

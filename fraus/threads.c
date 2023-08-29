@@ -16,7 +16,7 @@
 
 /* Thread */
 
-uint32_t frGetNumberOfLogicalCores()
+uint32_t frGetNumberOfLogicalCores(void)
 {
 #ifdef _WIN32
 
@@ -58,7 +58,7 @@ FrResult frJoinThread(FrThread thread, int* pReturnValue)
 
 	if(pReturnValue)
 	{
-		if(!GetExitCodeThread(thread, pReturnValue)) return FR_ERROR_UNKNOWN;
+		if(!GetExitCodeThread(thread, (LPDWORD)pReturnValue)) return FR_ERROR_UNKNOWN;
 	}
 
 	if(!CloseHandle(thread)) return GetLastError() == ERROR_INVALID_HANDLE ? FR_ERROR_INVALID_ARGUMENT : FR_ERROR_UNKNOWN;
@@ -230,6 +230,10 @@ FrResult frDestroyConditionVariable(FrConditionVariable* pConditionVariable)
 
 	if(res == EINVAL) return FR_ERROR_INVALID_ARGUMENT;
 	if(res != 0) return FR_ERROR_UNKNOWN;
+
+#else
+
+	(void)pConditionVariable;
 
 #endif
 

@@ -12,46 +12,112 @@
 static size_t windowCount = 0;
 
 /*
- * Translate a Win32 virtual-key code to a FrKey
+ * Translate a Win32 virtual-key code to an FrKey
  * - virtualKey: the Win32 virtual-key
  */
 static FrKey frWin32VirtualKeyToFrKey(WPARAM virtualKey)
 {
 	switch(virtualKey)
 	{
-		case 0x41: return FR_KEY_A;
-		case 0x42: return FR_KEY_B;
-		case 0x43: return FR_KEY_C;
-		case 0x44: return FR_KEY_D;
-		case 0x45: return FR_KEY_E;
-		case 0x46: return FR_KEY_F;
-		case 0x47: return FR_KEY_G;
-		case 0x48: return FR_KEY_H;
-		case 0x49: return FR_KEY_I;
-		case 0x4A: return FR_KEY_J;
-		case 0x4B: return FR_KEY_K;
-		case 0x4C: return FR_KEY_L;
-		case 0x4D: return FR_KEY_M;
-		case 0x4E: return FR_KEY_N;
-		case 0x4F: return FR_KEY_O;
-		case 0x50: return FR_KEY_P;
-		case 0x51: return FR_KEY_Q;
-		case 0x52: return FR_KEY_R;
-		case 0x53: return FR_KEY_S;
-		case 0x54: return FR_KEY_T;
-		case 0x55: return FR_KEY_U;
-		case 0x56: return FR_KEY_V;
-		case 0x57: return FR_KEY_W;
-		case 0x58: return FR_KEY_X;
-		case 0x59: return FR_KEY_Y;
-		case 0x5A: return FR_KEY_Z;
+		case VK_LBUTTON: return FR_KEY_LEFT_MOUSE;
+		case VK_RBUTTON: return FR_KEY_RIGHT_MOUSE;
+
+		case 'A': return FR_KEY_A;
+		case 'B': return FR_KEY_B;
+		case 'C': return FR_KEY_C;
+		case 'D': return FR_KEY_D;
+		case 'E': return FR_KEY_E;
+		case 'F': return FR_KEY_F;
+		case 'G': return FR_KEY_G;
+		case 'H': return FR_KEY_H;
+		case 'I': return FR_KEY_I;
+		case 'J': return FR_KEY_J;
+		case 'K': return FR_KEY_K;
+		case 'L': return FR_KEY_L;
+		case 'M': return FR_KEY_M;
+		case 'N': return FR_KEY_N;
+		case 'O': return FR_KEY_O;
+		case 'P': return FR_KEY_P;
+		case 'Q': return FR_KEY_Q;
+		case 'R': return FR_KEY_R;
+		case 'S': return FR_KEY_S;
+		case 'T': return FR_KEY_T;
+		case 'U': return FR_KEY_U;
+		case 'V': return FR_KEY_V;
+		case 'W': return FR_KEY_W;
+		case 'X': return FR_KEY_X;
+		case 'Y': return FR_KEY_Y;
+		case 'Z': return FR_KEY_Z;
 
 		case VK_LEFT: return FR_KEY_LEFT;
 		case VK_RIGHT: return FR_KEY_RIGHT;
 		case VK_UP: return FR_KEY_UP;
 		case VK_DOWN: return FR_KEY_DOWN;
 
+		case VK_SPACE: return FR_KEY_SPACE;
+
+		case VK_LCONTROL: return FR_KEY_LEFT_CONTROL;
+		case VK_RCONTROL: return FR_KEY_RIGHT_CONTROL;
+		case VK_LSHIFT: return FR_KEY_LEFT_SHIFT;
+		case VK_RSHIFT: return FR_KEY_RIGHT_SHIFT;
+
 		case VK_ESCAPE: return FR_KEY_ESCAPE;
+
+		default: return FR_KEY_UNKNOWN;
+	}
+}
+
+/*
+ * Translate an FrKeyto a Win32 virtual-key code
+ * - key: the FrKey
+ */
+static int frFrKeyToWin32VirtualKey(FrKey key)
+{
+	switch(key)
+	{
+		case FR_KEY_LEFT_MOUSE: return VK_LBUTTON;
+		case FR_KEY_RIGHT_MOUSE: return VK_RBUTTON;
+
+		case FR_KEY_A: return 'A';
+		case FR_KEY_B: return 'B';
+		case FR_KEY_C: return 'C';
+		case FR_KEY_D: return 'D';
+		case FR_KEY_E: return 'E';
+		case FR_KEY_F: return 'F';
+		case FR_KEY_G: return 'G';
+		case FR_KEY_H: return 'H';
+		case FR_KEY_I: return 'I';
+		case FR_KEY_J: return 'J';
+		case FR_KEY_K: return 'K';
+		case FR_KEY_L: return 'L';
+		case FR_KEY_M: return 'M';
+		case FR_KEY_N: return 'N';
+		case FR_KEY_O: return 'O';
+		case FR_KEY_P: return 'P';
+		case FR_KEY_Q: return 'Q';
+		case FR_KEY_R: return 'R';
+		case FR_KEY_S: return 'S';
+		case FR_KEY_T: return 'T';
+		case FR_KEY_U: return 'U';
+		case FR_KEY_V: return 'V';
+		case FR_KEY_W: return 'W';
+		case FR_KEY_X: return 'X';
+		case FR_KEY_Y: return 'Y';
+		case FR_KEY_Z: return 'Z';
+
+		case FR_KEY_LEFT: return VK_LEFT;
+		case FR_KEY_RIGHT: return VK_RIGHT;
+		case FR_KEY_UP: return VK_UP;
+		case FR_KEY_DOWN: return VK_DOWN;
+
+		case FR_KEY_SPACE: return VK_SPACE;
+
+		case FR_KEY_LEFT_CONTROL: return VK_LCONTROL;
+		case FR_KEY_RIGHT_CONTROL: return VK_RCONTROL;
+		case FR_KEY_LEFT_SHIFT: return VK_LSHIFT;
+		case FR_KEY_RIGHT_SHIFT: return VK_RSHIFT;
+
+		case FR_KEY_ESCAPE: return VK_ESCAPE;
 
 		default: return FR_KEY_UNKNOWN;
 	}
@@ -70,8 +136,67 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 
 	switch(message)
 	{
-		case WM_MOUSEMOVE:
-			if(pWindow->handlers.mouseMoveHandler) pWindow->handlers.mouseMoveHandler(LOWORD(lParam), HIWORD(lParam), pWindow->handlers.pMouseMoveHandlerUserData);
+		case WM_CREATE:
+			{
+				// Register mouse device
+				RAWINPUTDEVICE device = {
+					.usUsagePage = 1,
+					.usUsage = 2,
+					.dwFlags = 0,
+					.hwndTarget = handle
+				};
+				RegisterRawInputDevices(&device, 1, sizeof(RAWINPUTDEVICE));
+			}
+			break;
+
+		case WM_SETFOCUS:
+			// Hide cursor
+			ShowCursor(false);
+			break;
+
+		case WM_KILLFOCUS:
+			// Show cursor
+			ShowCursor(true);
+			break;
+
+		case WM_INPUT:
+			if(pWindow->handlers.mouseMoveHandler)
+			{
+				static UINT size = sizeof(RAWINPUT);
+				static RAWINPUT input;
+
+				GetRawInputData(
+					(HRAWINPUT)lParam,
+					RID_INPUT,
+					&input,
+					&size,
+					sizeof(RAWINPUTHEADER)
+				);
+
+				if(input.header.dwType == RIM_TYPEMOUSE && input.data.mouse.usFlags == MOUSE_MOVE_RELATIVE)
+				{
+					pWindow->handlers.mouseMoveHandler(
+						input.data.mouse.lLastX,
+						input.data.mouse.lLastY,
+						pWindow->handlers.pMouseMoveHandlerUserData
+					);
+				}
+
+				// Cleanup
+				if(GET_RAWINPUT_CODE_WPARAM(wParam) == RIM_INPUT)
+				{
+					DefWindowProc(handle, message, lParam, wParam);
+				}
+
+				// Center cursor
+				RECT windowRect;
+				GetWindowRect(handle, &windowRect);
+
+				SetCursorPos(
+					windowRect.left + (windowRect.right - windowRect.left) / 2,
+					windowRect.top + (windowRect.bottom - windowRect.top) / 2
+				);
+			}
 			break;
 
 		case WM_LBUTTONDOWN:
@@ -83,15 +208,25 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 			break;
 
 		case WM_KEYDOWN:
-			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam), FR_KEY_STATUS_DOWN, pWindow->handlers.pKeyHandlerUserData);
+			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam), FR_KEY_STATE_DOWN, pWindow->handlers.pKeyHandlerUserData);
 			break;
 
 		case WM_KEYUP:
-			if (pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam), FR_KEY_STATUS_UP, pWindow->handlers.pKeyHandlerUserData);
+			if (pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(frWin32VirtualKeyToFrKey(wParam), FR_KEY_STATE_UP, pWindow->handlers.pKeyHandlerUserData);
 			break;
 
 		case WM_SIZE:
 			pWindow->resized = true;
+
+			// Get window rect and set cursor position
+			RECT windowRect;
+			GetWindowRect(handle, &windowRect);
+
+			SetCursorPos(
+				windowRect.left + (windowRect.right - windowRect.left) / 2,
+				windowRect.top + (windowRect.bottom - windowRect.top) / 2
+			);
+
 			if(pWindow->handlers.resizeHandler) pWindow->handlers.resizeHandler(LOWORD(lParam), HIWORD(lParam), pWindow->handlers.pResizeHandlerUserData);
 			break;
 
@@ -179,7 +314,20 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
  */
 void frCloseWindow(FrWindow* pWindow)
 {
+#ifdef _WIN32
 	DestroyWindow(pWindow->handle);
+#endif
+}
+
+/*
+ * Get the state of a key
+ * - key: the key
+ */
+FrKeyState frGetKeyState(FrKey key)
+{
+#ifdef _WIN32
+	return GetKeyState(frFrKeyToWin32VirtualKey(key)) >= 0 ? FR_KEY_STATE_UP : FR_KEY_STATE_DOWN;
+#endif
 }
 
 /* Handlers */
