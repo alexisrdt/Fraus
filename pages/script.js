@@ -17,5 +17,5 @@ const observer = new IntersectionObserver(entries => {
 			entry.target.classList.add("fade-in");
 		}
 	});
-});
+}, { threshold: 1 });
 document.querySelectorAll("h1").forEach(h1 => observer.observe(h1));
