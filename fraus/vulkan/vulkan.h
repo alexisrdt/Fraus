@@ -7,7 +7,10 @@
 #include "utils.h"
 #include "../window.h"
 
-FrResult frCreateInstance(const char* pName, uint32_t version, FrVulkanData* pVulkanData);
+FrResult frCreateVulkanData(FrVulkanData* pVulkanData, const char* pName, uint32_t version);
+FrResult frDestroyVulkanData(FrVulkanData* pVulkanData);
+
+FrResult frCreateInstance(FrVulkanData* pVulkanData, const char* pName, uint32_t version);
 FrResult frChoosePhysicalDevice(FrVulkanData* pVulkanData);
 FrResult frCreateSurface(FrVulkanData* pVulkanData);
 FrResult frCreateDevice(FrVulkanData* pVulkanData);
@@ -20,7 +23,7 @@ FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData);
 FrResult frCreateSampler(FrVulkanData* pVulkanData);
 FrResult frCreateColorImage(FrVulkanData* pVulkanData);
 FrResult frCreateDepthImage(FrVulkanData* pVulkanData);
-FrResult frCreateCommandPool(FrVulkanData* pVulkanData);
+FrResult frCreateCommandPools(FrVulkanData* pVulkanData);
 FrResult frDrawFrame(FrVulkanData* pVulkanData);
 
 FrResult frRecreateSwapchain(FrVulkanData* pVulkanData);

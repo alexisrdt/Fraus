@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <wchar.h>
 
 #include "utils.h"
 
@@ -69,16 +68,8 @@ typedef enum FrKeyState
 	FR_KEY_STATE_UP,
 } FrKeyState;
 
-// Mouse button enum
-typedef enum FrMouseButton
-{
-	FR_MOUSE_LEFT,
-	FR_MOUSE_RIGHT
-} FrMouseButton;
-
 // Handlers
 typedef void(*FrMouseMoveHandler)(int32_t dx, int32_t dy, void* pUserData);
-typedef void(*FrClickHandler)(FrMouseButton button, void* pUserData);
 typedef void(*FrKeyHandler)(FrKey key, FrKeyState state, void* pUserData);
 typedef void(*FrResizeHandler)(uint16_t newWidth, uint16_t newHeight, void* pUserData);
 
@@ -86,9 +77,6 @@ typedef struct FrEventHandlers
 {
 	FrMouseMoveHandler mouseMoveHandler;
 	void* pMouseMoveHandlerUserData;
-
-	FrClickHandler clickHandler;
-	void* pClickHandlerUserData;
 
 	FrKeyHandler keyHandler;
 	void* pKeyHandlerUserData;
@@ -113,13 +101,13 @@ typedef struct FrWindow
  * - pTitle: the title of the window
  * - pWindow: pointer to a handle for the window
  */
-FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow);
+FrResult frCreateWindow(const char* pTitle, FrWindow* pWindow);
 
 /*
- * Close a window
+ * Destroy a window
  * - pWindow: pointer to the window
  */
-void frCloseWindow(FrWindow* pWindow);
+void frDestroyWindow(FrWindow* pWindow);
 
 /*
  * Get the state of a key
@@ -135,13 +123,6 @@ FrKeyState frGetKeyState(FrKey key);
  * - handler: the handler
  */
 void frSetMouseMoveHandler(FrWindow* pWindow, FrMouseMoveHandler handler, void* pUserData);
-
-/*
- * Set the click handler
- * - pWindow: pointer to the window
- * - handler: the handler
- */
-void frSetClickHandler(FrWindow* pWindow, FrClickHandler handler, void* pUserData);
 
 /*
  * Set the key handler

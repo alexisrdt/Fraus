@@ -8,7 +8,7 @@
 FrResult frFindMemoryTypeIndex(FrVulkanData* pVulkanData, uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* pIndex)
 {
 	VkPhysicalDeviceMemoryProperties memoryProperties;
-	vkGetPhysicalDeviceMemoryProperties(pVulkanData->physicalDevice, &memoryProperties);
+	pVulkanData->functions.vkGetPhysicalDeviceMemoryProperties(pVulkanData->physicalDevice, &memoryProperties);
 
 	uint32_t memoryTypeIndex;
 	for(memoryTypeIndex = 0; memoryTypeIndex < memoryProperties.memoryTypeCount; ++memoryTypeIndex)
@@ -30,20 +30,20 @@ FrResult frBeginCommandBuffer(FrVulkanData* pVulkanData, VkCommandBuffer* pComma
 	// Create command buffer
 	VkCommandBufferAllocateInfo allocateInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = pVulkanData->commandPools[pVulkanData->frameInFlightIndex],
+		.commandPool = pVulkanData->pCommandPools[pVulkanData->frameInFlightIndex],
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		.commandBufferCount = 1
 	};
-	if(vkAllocateCommandBuffers(pVulkanData->device, &allocateInfo, pCommandBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(pVulkanData->functions.vkAllocateCommandBuffers(pVulkanData->device, &allocateInfo, pCommandBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	// Begin command buffer
 	VkCommandBufferBeginInfo beginInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
 	};
-	if(vkBeginCommandBuffer(*pCommandBuffer, &beginInfo) != VK_SUCCESS)
+	if(pVulkanData->functions.vkBeginCommandBuffer(*pCommandBuffer, &beginInfo) != VK_SUCCESS)
 	{
-		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPools[pVulkanData->frameInFlightIndex], 1, pCommandBuffer);
+		pVulkanData->functions.vkFreeCommandBuffers(pVulkanData->device, pVulkanData->pCommandPools[pVulkanData->frameInFlightIndex], 1, pCommandBuffer);
 		return FR_ERROR_UNKNOWN;
 	}
 
@@ -53,9 +53,9 @@ FrResult frBeginCommandBuffer(FrVulkanData* pVulkanData, VkCommandBuffer* pComma
 FrResult frEndCommandBuffer(FrVulkanData* pVulkanData, VkCommandBuffer commandBuffer)
 {
 	// End command buffer
-	if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+	if(pVulkanData->functions.vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
 	{
-		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPools[pVulkanData->frameInFlightIndex], 1, &commandBuffer);
+		pVulkanData->functions.vkFreeCommandBuffers(pVulkanData->device, pVulkanData->pCommandPools[pVulkanData->frameInFlightIndex], 1, &commandBuffer);
 		return FR_ERROR_UNKNOWN;
 	}
 
@@ -65,21 +65,21 @@ FrResult frEndCommandBuffer(FrVulkanData* pVulkanData, VkCommandBuffer commandBu
 		.commandBufferCount = 1,
 		.pCommandBuffers = &commandBuffer
 	};
-	if(vkQueueSubmit(pVulkanData->queue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+	if(pVulkanData->functions.vkQueueSubmit(pVulkanData->queue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
 	{
-		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPools[pVulkanData->frameInFlightIndex], 1, &commandBuffer);
+		pVulkanData->functions.vkFreeCommandBuffers(pVulkanData->device, pVulkanData->pCommandPools[pVulkanData->frameInFlightIndex], 1, &commandBuffer);
 		return FR_ERROR_UNKNOWN;
 	}
 
 	// Wait idle
-	if(vkQueueWaitIdle(pVulkanData->queue) != VK_SUCCESS)
+	if(pVulkanData->functions.vkQueueWaitIdle(pVulkanData->queue) != VK_SUCCESS)
 	{
-		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPools[pVulkanData->frameInFlightIndex], 1, &commandBuffer);
+		pVulkanData->functions.vkFreeCommandBuffers(pVulkanData->device, pVulkanData->pCommandPools[pVulkanData->frameInFlightIndex], 1, &commandBuffer);
 		return FR_ERROR_UNKNOWN;
 	}
 
 	// Free command buffer
-	vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPools[pVulkanData->frameInFlightIndex], 1, &commandBuffer);
+	pVulkanData->functions.vkFreeCommandBuffers(pVulkanData->device, pVulkanData->pCommandPools[pVulkanData->frameInFlightIndex], 1, &commandBuffer);
 
 	return FR_SUCCESS;
 }
@@ -94,16 +94,16 @@ FrResult frCreateBuffer(FrVulkanData* pVulkanData, VkDeviceSize size, VkBufferUs
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
 	};
 
-	if(vkCreateBuffer(pVulkanData->device, &createInfo, NULL, pBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(pVulkanData->functions.vkCreateBuffer(pVulkanData->device, &createInfo, NULL, pBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	// Memory allocation
 	VkMemoryRequirements memoryRequirements;
-	vkGetBufferMemoryRequirements(pVulkanData->device, *pBuffer, &memoryRequirements);
+	pVulkanData->functions.vkGetBufferMemoryRequirements(pVulkanData->device, *pBuffer, &memoryRequirements);
 
 	uint32_t memoryTypeIndex;
 	if(frFindMemoryTypeIndex(pVulkanData, memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex) != FR_SUCCESS)
 	{
-		vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
+		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
@@ -113,16 +113,16 @@ FrResult frCreateBuffer(FrVulkanData* pVulkanData, VkDeviceSize size, VkBufferUs
 		.memoryTypeIndex = memoryTypeIndex
 	};
 
-	if(vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, pBufferMemory) != VK_SUCCESS)
+	if(pVulkanData->functions.vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, pBufferMemory) != VK_SUCCESS)
 	{
-		vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
+		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
-	if(vkBindBufferMemory(pVulkanData->device, *pBuffer, *pBufferMemory, 0) != VK_SUCCESS)
+	if(pVulkanData->functions.vkBindBufferMemory(pVulkanData->device, *pBuffer, *pBufferMemory, 0) != VK_SUCCESS)
 	{
-		vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, *pBufferMemory, NULL);
+		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, *pBuffer, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pBufferMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
@@ -139,7 +139,7 @@ FrResult frCopyBuffer(FrVulkanData* pVulkanData, VkBuffer sourceBuffer, VkBuffer
 	VkBufferCopy region = {
 		.size = size
 	};
-	vkCmdCopyBuffer(commandBuffer, sourceBuffer, destinationBuffer, 1, &region);
+	pVulkanData->functions.vkCmdCopyBuffer(commandBuffer, sourceBuffer, destinationBuffer, 1, &region);
 
 	// End command buffer
 	if(frEndCommandBuffer(pVulkanData, commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
@@ -186,11 +186,11 @@ static FrResult frTransitionImageLayout(FrVulkanData* pVulkanData, VkImage image
 	}
 	else
 	{
-		vkFreeCommandBuffers(pVulkanData->device, pVulkanData->commandPools[pVulkanData->frameInFlightIndex], 1, &commandBuffer);
+		pVulkanData->functions.vkFreeCommandBuffers(pVulkanData->device, pVulkanData->pCommandPools[pVulkanData->frameInFlightIndex], 1, &commandBuffer);
 		return FR_ERROR_INVALID_ARGUMENT;
 	}
 
-	vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
+	pVulkanData->functions.vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
 
 	if(frEndCommandBuffer(pVulkanData, commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
@@ -213,7 +213,7 @@ static FrResult frCopyBufferToImage(FrVulkanData* pVulkanData, VkBuffer buffer, 
 		.imageOffset = {0, 0, 0},
 		.imageExtent = {width, height, 1}
 	};
-	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+	pVulkanData->functions.vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 	if(frEndCommandBuffer(pVulkanData, commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
@@ -238,16 +238,16 @@ FrResult frCreateImage(FrVulkanData* pVulkanData, uint32_t width, uint32_t heigh
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
 	};
-	if(vkCreateImage(pVulkanData->device, &createInfo, NULL, pImage) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(pVulkanData->functions.vkCreateImage(pVulkanData->device, &createInfo, NULL, pImage) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	// Memory allocation
 	VkMemoryRequirements memoryRequirements;
-	vkGetImageMemoryRequirements(pVulkanData->device, *pImage, &memoryRequirements);
+	pVulkanData->functions.vkGetImageMemoryRequirements(pVulkanData->device, *pImage, &memoryRequirements);
 
 	uint32_t memoryTypeIndex;
 	if(frFindMemoryTypeIndex(pVulkanData, memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex) != FR_SUCCESS)
 	{
-		vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
@@ -257,16 +257,16 @@ FrResult frCreateImage(FrVulkanData* pVulkanData, uint32_t width, uint32_t heigh
 		.memoryTypeIndex = memoryTypeIndex
 	};
 
-	if(vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, pImageMemory) != VK_SUCCESS)
+	if(pVulkanData->functions.vkAllocateMemory(pVulkanData->device, &allocateInfo, NULL, pImageMemory) != VK_SUCCESS)
 	{
-		vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
-	if(vkBindImageMemory(pVulkanData->device, *pImage, *pImageMemory, 0) != VK_SUCCESS)
+	if(pVulkanData->functions.vkBindImageMemory(pVulkanData->device, *pImage, *pImageMemory, 0) != VK_SUCCESS)
 	{
-		vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
@@ -291,7 +291,7 @@ FrResult frCreateImageView(FrVulkanData* pVulkanData, VkImage image, VkFormat fo
 		.subresourceRange.layerCount = 1
 	};
 
-	if(vkCreateImageView(pVulkanData->device, &createInfo, NULL, pImageView) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(pVulkanData->functions.vkCreateImageView(pVulkanData->device, &createInfo, NULL, pImageView) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	return FR_SUCCESS;
 }
@@ -299,7 +299,7 @@ FrResult frCreateImageView(FrVulkanData* pVulkanData, VkImage image, VkFormat fo
 static FrResult frGenerateMipmap(FrVulkanData* pVulkanData, VkImage image, VkFormat format, uint32_t width, uint32_t height, uint32_t mipLevels)
 {
 	VkFormatProperties formatProperties;
-	vkGetPhysicalDeviceFormatProperties(pVulkanData->physicalDevice, format, &formatProperties);
+	pVulkanData->functions.vkGetPhysicalDeviceFormatProperties(pVulkanData->physicalDevice, format, &formatProperties);
 	if(!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) return FR_ERROR_UNKNOWN;
 
 	VkCommandBuffer commandBuffer;
@@ -326,7 +326,7 @@ static FrResult frGenerateMipmap(FrVulkanData* pVulkanData, VkImage image, VkFor
 		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
-		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+		pVulkanData->functions.vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
 
 		VkImageBlit blit = {
 			.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -342,14 +342,14 @@ static FrResult frGenerateMipmap(FrVulkanData* pVulkanData, VkImage image, VkFor
 			.dstOffsets[0] = {0, 0, 0},
 			.dstOffsets[1] = {mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1}
 		};
-		vkCmdBlitImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+		pVulkanData->functions.vkCmdBlitImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
 
 		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 		barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+		pVulkanData->functions.vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
 
 		if (mipWidth > 1) mipWidth /= 2;
 		if (mipHeight > 1) mipHeight /= 2;
@@ -361,7 +361,7 @@ static FrResult frGenerateMipmap(FrVulkanData* pVulkanData, VkImage image, VkFor
 	barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+	pVulkanData->functions.vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
 
 	if(frEndCommandBuffer(pVulkanData, commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
@@ -423,13 +423,13 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath, VkDeviceM
 
 	// Upload data to the device
 	void* pData;
-	if(vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData) != VK_SUCCESS)
+	if(pVulkanData->functions.vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData) != VK_SUCCESS)
 	{
 		free(image.pData);
 		return FR_ERROR_UNKNOWN;
 	}
 	memcpy(pData, image.pData, size);
-	vkUnmapMemory(pVulkanData->device, stagingBufferMemory);
+	pVulkanData->functions.vkUnmapMemory(pVulkanData->device, stagingBufferMemory);
 
 	// Free image
 	free(image.pData);
@@ -449,54 +449,54 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath, VkDeviceM
 		pImageMemory
 	) != VK_SUCCESS)
 	{
-		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
 	// Copy data to image
 	if(frTransitionImageLayout(pVulkanData, *pImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, pVulkanData->textureMipLevels) != FR_SUCCESS)
 	{
-		vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
-		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
 	if(frCopyBufferToImage(pVulkanData, stagingBuffer, *pImage, image.width, image.height) != FR_SUCCESS)
 	{
-		vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
-		vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-		vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
-	vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-	vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+	pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+	pVulkanData->functions.vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 
 	// Mipmap
 	if(frGenerateMipmap(pVulkanData, *pImage, VK_FORMAT_R8G8B8A8_SRGB, image.width, image.height, pVulkanData->textureMipLevels) != FR_SUCCESS)
 	{
-		vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
 	// If no mipmap
 	/* if(frTransitionImageLayout(pVulkanData, *pImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, pVulkanData->textureMipLevels) != FR_SUCCESS)
 	{
-		vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	} */
 
 	// Create image view
 	if(frCreateImageView(pVulkanData, *pImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, pVulkanData->textureMipLevels, pImageView) != FR_SUCCESS)
 	{
-		vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 

@@ -13,15 +13,34 @@
 #include "vulkan/vulkan.h"
 #include "window.h"
 
-FrResult frInit(void);
+typedef struct FrApplication
+{
+	FrWindow window;
+	FrVulkanData vulkanData;
+} FrApplication;
 
 /*
- * Main loop of the program
- * Returns the exit value of the program
+ * Create a Fraus application
+ * Returns:
+ * - FR_SUCCESS if everything went well
+ * - FR_ERROR_FILE_NOT_FOUND if the Vulkan library could not be found
+ * - FR_ERROR_UNKNOWN if some other error occured
  */
-int frMainLoop(FrVulkanData* pVulkanData);
+FrResult frCreateApplication(const char* pName, uint32_t version, FrApplication* pApplication);
 
-FrResult frFinish(void);
+/*
+ * Destroy a Fraus application
+ * Returns:
+ * - FR_SUCCESS if everything went well
+ * - FR_ERROR_UNKNOWN if freeing the Vulkan library failed
+ */
+FrResult frDestroyApplication(FrApplication* pApplication);
 
+/*
+ * Main loop of the application
+ * - pApplication: pointer to an application
+ * Returns the exit value of the application
+ */
+int frMainLoop(FrApplication* pApplication);
 
 #endif

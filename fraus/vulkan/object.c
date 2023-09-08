@@ -6,12 +6,11 @@
 
 #include <stdio.h>
 
+FR_DEFINE_VECTOR(FrVulkanObject, VulkanObject)
+
 FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, const char* pTexturePath)
 {
-	++pVulkanData->objectCount;
-	FrVulkanObject* pNewObjects = realloc(pVulkanData->pObjects, pVulkanData->objectCount * sizeof(pVulkanData->pObjects[0]));
-	if(!pNewObjects) return FR_ERROR_OUT_OF_MEMORY;
-	pVulkanData->pObjects = pNewObjects;
+	FrVulkanObject object;
 
 	FrModel model;
 	if(frLoadOBJ(pModelPath, &model) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
@@ -25,34 +24,35 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, const
 	if(frCreateBuffer(pVulkanData, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	void* pData;
-	vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData);
+	pVulkanData->functions.vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData);
 	memcpy(pData, model.pVertices, model.vertexCount * sizeof(model.pVertices[0]));
 	memcpy((uint8_t*)pData + model.vertexCount * sizeof(model.pVertices[0]), model.pIndexes, model.indexCount * sizeof(model.pIndexes[0]));
-	vkUnmapMemory(pVulkanData->device, stagingBufferMemory);
+	pVulkanData->functions.vkUnmapMemory(pVulkanData->device, stagingBufferMemory);
 
 	if(frCreateBuffer(
 		pVulkanData,
 		size,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &pVulkanData->pObjects[pVulkanData->objectCount - 1].buffer,
-		&pVulkanData->pObjects[pVulkanData->objectCount - 1].memory) != VK_SUCCESS
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &object.buffer,
+		&object.memory) != VK_SUCCESS
 	) return FR_ERROR_UNKNOWN;
 
-	if(frCopyBuffer(pVulkanData, stagingBuffer, pVulkanData->pObjects[pVulkanData->objectCount - 1].buffer, size) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(frCopyBuffer(pVulkanData, stagingBuffer, object.buffer, size) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
-	vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
-	vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
+	pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
+	pVulkanData->functions.vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 
-	pVulkanData->pObjects[pVulkanData->objectCount - 1].vertexCount = model.vertexCount;
-	pVulkanData->pObjects[pVulkanData->objectCount - 1].indexCount = model.indexCount;
+	object.vertexCount = model.vertexCount;
+	object.pVertices = model.pVertices;
+	object.indexCount = model.indexCount;
 
 	// Texture
 	if(frCreateTexture(
 		pVulkanData,
 		pTexturePath,
-		&pVulkanData->pObjects[pVulkanData->objectCount - 1].textureMemory,
-		&pVulkanData->pObjects[pVulkanData->objectCount - 1].textureImage,
-		&pVulkanData->pObjects[pVulkanData->objectCount - 1].textureImageView
+		&object.textureMemory,
+		&object.textureImage,
+		&object.textureImageView
 	) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	// Descriptor pool
@@ -74,15 +74,15 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, const
 		.pPoolSizes = poolSizes
 	};
 
-	if(vkCreateDescriptorPool(
+	if(pVulkanData->functions.vkCreateDescriptorPool(
 		pVulkanData->device,
 		&descriptorPoolCreateInfo,
 		NULL,
-		&pVulkanData->pObjects[pVulkanData->objectCount - 1].descriptorPool
+		&object.descriptorPool
 	) != VK_SUCCESS)
 	{
-		vkDestroyBuffer(pVulkanData->device, pVulkanData->pObjects[pVulkanData->objectCount - 1].buffer, NULL);
-		vkFreeMemory(pVulkanData->device, pVulkanData->pObjects[pVulkanData->objectCount - 1].memory, NULL);
+		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, object.buffer, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, object.memory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
@@ -95,15 +95,15 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, const
 
 	VkDescriptorSetAllocateInfo descriptorSetsAllocateInfo = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = pVulkanData->pObjects[pVulkanData->objectCount - 1].descriptorPool,
+		.descriptorPool = object.descriptorPool,
 		.descriptorSetCount = FR_FRAMES_IN_FLIGHT,
 		.pSetLayouts = layouts
 	};
-	if(vkAllocateDescriptorSets(pVulkanData->device, &descriptorSetsAllocateInfo, pVulkanData->pObjects[pVulkanData->objectCount - 1].descriptorSets) != VK_SUCCESS)
+	if(pVulkanData->functions.vkAllocateDescriptorSets(pVulkanData->device, &descriptorSetsAllocateInfo, object.descriptorSets) != VK_SUCCESS)
 	{
-		vkDestroyDescriptorPool(pVulkanData->device, pVulkanData->pObjects[pVulkanData->objectCount - 1].descriptorPool, NULL);
-		vkDestroyBuffer(pVulkanData->device, pVulkanData->pObjects[pVulkanData->objectCount - 1].buffer, NULL);
-		vkFreeMemory(pVulkanData->device, pVulkanData->pObjects[pVulkanData->objectCount - 1].memory, NULL);
+		pVulkanData->functions.vkDestroyDescriptorPool(pVulkanData->device, object.descriptorPool, NULL);
+		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, object.buffer, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, object.memory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
@@ -117,14 +117,14 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, const
 
 		VkDescriptorImageInfo imageInfo = {
 			.sampler = pVulkanData->textureSampler,
-			.imageView = pVulkanData->pObjects[pVulkanData->objectCount - 1].textureImageView,
+			.imageView = object.textureImageView,
 			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 		};
 
 		VkWriteDescriptorSet descriptorWrites[] = {
 			{
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = pVulkanData->pObjects[pVulkanData->objectCount - 1].descriptorSets[descriptorSetIndex],
+				.dstSet = object.descriptorSets[descriptorSetIndex],
 				.dstBinding = 0,
 				.dstArrayElement = 0,
 				.descriptorCount = 1,
@@ -133,7 +133,7 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, const
 			},
 			{
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = pVulkanData->pObjects[pVulkanData->objectCount - 1].descriptorSets[descriptorSetIndex],
+				.dstSet = object.descriptorSets[descriptorSetIndex],
 				.dstBinding = 1,
 				.dstArrayElement = 0,
 				.descriptorCount = 1,
@@ -142,22 +142,25 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, const
 			}
 		};
 
-		vkUpdateDescriptorSets(pVulkanData->device, sizeof(descriptorWrites) / sizeof(descriptorWrites[0]), descriptorWrites, 0, NULL);
+		pVulkanData->functions.vkUpdateDescriptorSets(pVulkanData->device, sizeof(descriptorWrites) / sizeof(descriptorWrites[0]), descriptorWrites, 0, NULL);
 	}
 
-	free(model.pVertices);
 	free(model.pIndexes);
+
+	if(frPushBackVulkanObjectVector(&pVulkanData->objects, object) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	return FR_SUCCESS;
 }
 
 void frDestroyObject(FrVulkanData* pVulkanData, FrVulkanObject* pObject)
 {
-	vkDestroyImageView(pVulkanData->device, pObject->textureImageView, NULL);
-	vkDestroyImage(pVulkanData->device, pObject->textureImage, NULL);
-	vkFreeMemory(pVulkanData->device, pObject->textureMemory, NULL);
+	free(pObject->pVertices);
 
-	vkDestroyDescriptorPool(pVulkanData->device, pObject->descriptorPool, NULL);
-	vkDestroyBuffer(pVulkanData->device, pObject->buffer, NULL);
-	vkFreeMemory(pVulkanData->device, pObject->memory, NULL);
+	pVulkanData->functions.vkDestroyImageView(pVulkanData->device, pObject->textureImageView, NULL);
+	pVulkanData->functions.vkDestroyImage(pVulkanData->device, pObject->textureImage, NULL);
+	pVulkanData->functions.vkFreeMemory(pVulkanData->device, pObject->textureMemory, NULL);
+
+	pVulkanData->functions.vkDestroyDescriptorPool(pVulkanData->device, pObject->descriptorPool, NULL);
+	pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, pObject->buffer, NULL);
+	pVulkanData->functions.vkFreeMemory(pVulkanData->device, pObject->memory, NULL);
 }

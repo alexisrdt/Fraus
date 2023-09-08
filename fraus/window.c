@@ -1,12 +1,9 @@
 #include "window.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #ifdef _WIN32
-
-#include <stdbool.h>
 
 // Window count
 static size_t windowCount = 0;
@@ -200,11 +197,19 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 			break;
 
 		case WM_LBUTTONDOWN:
-			if(pWindow->handlers.clickHandler) pWindow->handlers.clickHandler(FR_MOUSE_LEFT, pWindow->handlers.pClickHandlerUserData);
+			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(FR_KEY_LEFT_MOUSE, FR_KEY_STATE_DOWN, pWindow->handlers.pKeyHandlerUserData);
+			break;
+
+		case WM_LBUTTONUP:
+			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(FR_KEY_LEFT_MOUSE, FR_KEY_STATE_UP, pWindow->handlers.pKeyHandlerUserData);
 			break;
 
 		case WM_RBUTTONDOWN:
-			if(pWindow->handlers.clickHandler) pWindow->handlers.clickHandler(FR_MOUSE_RIGHT, pWindow->handlers.pClickHandlerUserData);
+			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(FR_KEY_RIGHT_MOUSE, FR_KEY_STATE_DOWN, pWindow->handlers.pKeyHandlerUserData);
+			break;
+
+		case WM_RBUTTONUP:
+			if(pWindow->handlers.keyHandler) pWindow->handlers.keyHandler(FR_KEY_RIGHT_MOUSE, FR_KEY_STATE_UP, pWindow->handlers.pKeyHandlerUserData);
 			break;
 
 		case WM_KEYDOWN:
@@ -255,7 +260,7 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
  * - pTitle: the title of the window
  * - pWindow: pointer to a handle for the window
  */
-FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
+FrResult frCreateWindow(const char* pTitle, FrWindow* pWindow)
 {
 #ifdef _WIN32
 	static HINSTANCE instance = NULL;
@@ -272,17 +277,34 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
 			.hIcon = LoadIcon(NULL, IDI_APPLICATION),
 			.hCursor = LoadCursor(NULL, IDC_ARROW),
 			.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1),
-			.lpszClassName = L"FrWindow",
+			.lpszClassName = TEXT("FrWindow"),
 			.hIcon = LoadIcon(NULL, IDI_APPLICATION)
 		};
-		if(!RegisterClassExW(&windowClass)) return FR_ERROR_UNKNOWN;
+		if(!RegisterClassEx(&windowClass)) return FR_ERROR_UNKNOWN;
 	}
 
-	// TODO: handle specifying title and size (maybe not position, useless)
-	pWindow->handle = CreateWindowExW(
+#if defined(UNICODE) || defined(_UNICODE)
+	int wideTitleSize = MultiByteToWideChar(CP_UTF8, 0, pTitle, -1, NULL, 0);
+	if(!wideTitleSize) return FR_ERROR_UNKNOWN;
+
+	WCHAR* pWideTitle = malloc(wideTitleSize * sizeof(WCHAR));
+	if(!pWideTitle) return FR_ERROR_OUT_OF_MEMORY;
+
+	if(MultiByteToWideChar(CP_UTF8, 0, pTitle, -1, pWideTitle, wideTitleSize) != wideTitleSize)
+	{
+		free(pWideTitle);
+		return FR_ERROR_UNKNOWN;
+	}
+#endif
+
+	pWindow->handle = CreateWindowEx(
 		WS_EX_OVERLAPPEDWINDOW,
-		L"FrWindow",
+		TEXT("FrWindow"),
+	#if defined(UNICODE) || defined(_UNICODE)
+		pWideTitle,
+	#else
 		pTitle,
+	#endif
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
@@ -293,6 +315,9 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
 		instance,
 		pWindow
 	);
+#if defined(UNICODE) || defined(_UNICODE)
+	free(pWideTitle);
+#endif
 	if(!pWindow->handle) return FR_ERROR_UNKNOWN;
 	++windowCount;
 
@@ -309,10 +334,10 @@ FrResult frCreateWindow(const wchar_t* pTitle, FrWindow* pWindow)
 }
 
 /*
- * Close a window
+ * Destroy a window
  * - pWindow: pointer to the window
  */
-void frCloseWindow(FrWindow* pWindow)
+void frDestroyWindow(FrWindow* pWindow)
 {
 #ifdef _WIN32
 	DestroyWindow(pWindow->handle);
@@ -341,17 +366,6 @@ void frSetMouseMoveHandler(FrWindow* pWindow, FrMouseMoveHandler handler, void* 
 {
 	pWindow->handlers.mouseMoveHandler = handler;
 	pWindow->handlers.pMouseMoveHandlerUserData = pUserData;
-}
-
-/*
- * Set the click handler
- * - pWindow: pointer to the window
- * - handler: the handler
- */
-void frSetClickHandler(FrWindow* pWindow, FrClickHandler handler, void* pUserData)
-{
-	pWindow->handlers.clickHandler = handler;
-	pWindow->handlers.pClickHandlerUserData = pUserData;
 }
 
 /*
