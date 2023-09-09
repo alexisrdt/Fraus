@@ -366,7 +366,7 @@ FrResult frCreateInstance(FrVulkanData* pVulkanData, const char* pName, uint32_t
 		.pApplicationName = pName,
 		.applicationVersion = version,
 		.pEngineName = "Fraus",
-		.engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 1),
+		.engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
 		.apiVersion = VK_API_VERSION_1_0
 	};
 
