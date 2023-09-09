@@ -1,6 +1,8 @@
 #ifndef FRAUS_MATH_H
 #define FRAUS_MATH_H
 
+#define PI 3.14159265358979323846f
+
 typedef union FrVec2
 {
 	struct {
@@ -49,5 +51,7 @@ void frLookDir(float matrix[16], const FrVec3* pEye, const FrVec3* pForward, con
 void frLookAt(float matrix[16], const FrVec3* pEye, const FrVec3* pObjective);
 void frPerspective(float matrix[16], float fov, float aspect, float near, float far);
 void frPerspectiveInfiniteFar(float matrix[16], float fov, float aspect, float near);
+
+void frMultiply(const float* restrict pFirst, const float* restrict pSecond, float* restrict pResult);
 
 #endif

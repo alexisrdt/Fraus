@@ -199,3 +199,23 @@ void frPerspectiveInfiniteFar(float matrix[16], float fov, float aspect, float n
 	matrix[14] = -near;
 	matrix[15] = 0.f;
 }
+
+void frMultiply(const float* restrict pFirst, const float* restrict pSecond, float* restrict pResult)
+{
+	pResult[ 0] = pFirst[ 0] * pSecond[ 0] + pFirst[ 1] * pSecond[ 4] + pFirst[ 2] * pSecond[ 8] + pFirst[ 3] * pSecond[12];
+	pResult[ 1] = pFirst[ 0] * pSecond[ 1] + pFirst[ 1] * pSecond[ 5] + pFirst[ 2] * pSecond[ 9] + pFirst[ 3] * pSecond[13];
+	pResult[ 2] = pFirst[ 0] * pSecond[ 2] + pFirst[ 1] * pSecond[ 6] + pFirst[ 2] * pSecond[10] + pFirst[ 3] * pSecond[14];
+	pResult[ 3] = pFirst[ 0] * pSecond[ 3] + pFirst[ 1] * pSecond[ 7] + pFirst[ 2] * pSecond[11] + pFirst[ 3] * pSecond[15];
+	pResult[ 4] = pFirst[ 4] * pSecond[ 0] + pFirst[ 5] * pSecond[ 4] + pFirst[ 6] * pSecond[ 8] + pFirst[ 7] * pSecond[12];
+	pResult[ 5] = pFirst[ 4] * pSecond[ 1] + pFirst[ 5] * pSecond[ 5] + pFirst[ 6] * pSecond[ 9] + pFirst[ 7] * pSecond[13];
+	pResult[ 6] = pFirst[ 4] * pSecond[ 2] + pFirst[ 5] * pSecond[ 6] + pFirst[ 6] * pSecond[10] + pFirst[ 7] * pSecond[14];
+	pResult[ 7] = pFirst[ 4] * pSecond[ 3] + pFirst[ 5] * pSecond[ 7] + pFirst[ 6] * pSecond[11] + pFirst[ 7] * pSecond[15];
+	pResult[ 8] = pFirst[ 8] * pSecond[ 0] + pFirst[ 9] * pSecond[ 4] + pFirst[10] * pSecond[ 8] + pFirst[11] * pSecond[12];
+	pResult[ 9] = pFirst[ 8] * pSecond[ 1] + pFirst[ 9] * pSecond[ 5] + pFirst[10] * pSecond[ 9] + pFirst[11] * pSecond[13];
+	pResult[10] = pFirst[ 8] * pSecond[ 2] + pFirst[ 9] * pSecond[ 6] + pFirst[10] * pSecond[10] + pFirst[11] * pSecond[14];
+	pResult[11] = pFirst[ 8] * pSecond[ 3] + pFirst[ 9] * pSecond[ 7] + pFirst[10] * pSecond[11] + pFirst[11] * pSecond[15];
+	pResult[12] = pFirst[12] * pSecond[ 0] + pFirst[13] * pSecond[ 4] + pFirst[14] * pSecond[ 8] + pFirst[15] * pSecond[12];
+	pResult[13] = pFirst[12] * pSecond[ 1] + pFirst[13] * pSecond[ 5] + pFirst[14] * pSecond[ 9] + pFirst[15] * pSecond[13];
+	pResult[14] = pFirst[12] * pSecond[ 2] + pFirst[13] * pSecond[ 6] + pFirst[14] * pSecond[10] + pFirst[15] * pSecond[14];
+	pResult[15] = pFirst[12] * pSecond[ 3] + pFirst[13] * pSecond[ 7] + pFirst[14] * pSecond[11] + pFirst[15] * pSecond[15];
+}

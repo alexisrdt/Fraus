@@ -112,7 +112,7 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, const
 		VkDescriptorBufferInfo bufferInfo = {
 			.buffer = pVulkanData->viewProjectionBuffers[descriptorSetIndex],
 			.offset = 0,
-			.range = sizeof(FrViewProjection)
+			.range = sizeof(float[16])
 		};
 
 		VkDescriptorImageInfo imageInfo = {

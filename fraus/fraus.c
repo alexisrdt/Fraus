@@ -56,7 +56,7 @@ FrResult frCreateApplication(const char* pName, uint32_t version, FrApplication*
 	pApplication->vulkanData.pApplication = pApplication;
 	if(frCreateVulkanData(&pApplication->vulkanData, pName, version) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
-	(void)version; // To remove when vulkan data is initialized
+	frCreateCamera(&pApplication->camera, &pApplication->vulkanData);
 
 	++frApplicationCount;
 

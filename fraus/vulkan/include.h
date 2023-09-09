@@ -21,12 +21,6 @@
 #include "../vector.h"
 #include "../window.h"
 
-typedef struct FrViewProjection
-{
-	float view[16];
-	float projection[16];
-} FrViewProjection;
-
 typedef struct FrVulkanData FrVulkanData;
 typedef void(*FrUpdateHandler)(FrVulkanData* pVulkanData, float elapsed, void* pUserData);
 

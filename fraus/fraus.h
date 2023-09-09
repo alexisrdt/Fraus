@@ -5,6 +5,7 @@
 #error C99 required
 #endif
 
+#include "camera.h"
 #include "images/images.h"
 #include "math.h"
 #include "models/models.h"
@@ -16,6 +17,7 @@
 typedef struct FrApplication
 {
 	FrWindow window;
+	FrCamera camera;
 	FrVulkanData vulkanData;
 } FrApplication;
 

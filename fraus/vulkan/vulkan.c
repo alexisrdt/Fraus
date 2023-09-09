@@ -6,6 +6,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "../camera.h"
 #include "../fraus.h"
 #include "functions.h"
 #include "utils.h"
@@ -1223,7 +1224,7 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData)
 {
 	// Compute size
-	VkDeviceSize size = sizeof(FrViewProjection);
+	VkDeviceSize size = sizeof(float[16]);
 
 	// Create uniform buffers
 	for(uint32_t i = 0; i < FR_FRAMES_IN_FLIGHT; ++i)
@@ -1336,7 +1337,7 @@ static FrResult frRecordCommandBuffer(FrVulkanData* pVulkanData, uint32_t thread
 	};
 	VkCommandBufferBeginInfo beginInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
 		.pInheritanceInfo = &inherintanceInfo
 	};
 	if(pVulkanData->functions.vkBeginCommandBuffer(pVulkanData->pSecondaryCommandBuffers[commandBufferIndex], &beginInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
@@ -1557,6 +1558,11 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 		pVulkanData->pUpdateHandlerUserData
 	);
 	lastTime = currentTime;
+
+	// Update camera
+	static float cameraMatrix[16];
+	frGetCameraMatrix(&pVulkanData->pApplication->camera, cameraMatrix);
+	memcpy(pVulkanData->pViewProjectionDatas[pVulkanData->frameInFlightIndex], cameraMatrix, sizeof(float[16]));
 
 	// Record command buffers to draw objects
 	pVulkanData->frameFinishedThreadCount = 0;

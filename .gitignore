@@ -14,6 +14,10 @@
 !/fraus
 !/fraus/**
 
+# Except demo
+!/demo
+!/demo/**
+
 # Except Pages
 !/pages
 !/pages/**
