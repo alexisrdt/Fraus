@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-#include "fraus/fraus.h"
+#include "fraus.h"
 
 void frCreateCamera(FrCamera* pCamera, FrVulkanData* pVulkanData)
 {

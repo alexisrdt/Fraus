@@ -8,12 +8,19 @@
 		<meta name="keywords" content="fraus, vulkan, rendering, engine" />
 		<title>Fraus</title>
 		<link rel="icon" href="resources/favicon.ico" />
-		<link rel="stylesheet" href="style.css" />
-		<script src="script.js" defer="defer"></script>
+		<link rel="stylesheet" href="vars.css" />
+		<link rel="stylesheet" href="https://alexisrdt.github.io/style.css" />
+		<script src="https://alexisrdt.github.io/script.js" defer="defer"></script>
 	</head>
 	<body>
 		<main>
 			<h1>Fraus</h1>
+			
+			<figure class="screenshot">
+				<img src="resources/fraus_demo.webp" alt="Demo of Fraus" />
+				<figcaption>Demo application for Fraus</figcaption>
+			</figure>
+
 			<section>
 				<h2>What is Fraus?</h2>
 				<p>
@@ -25,15 +32,18 @@
 				<h2>Capabilities</h2>
 				<p>
 					Fraus is still in development.
-					It is currently able to render a textured 3D model.
+					It is currently able to render several textured models in a 3D scene
+					and records commands with multiple threads. <br />
+					It also has a perspective camera which can easily be used to navigate the scene. <br />
+					There is a demo application available in the repository to test and experiment with Fraus.
 				</p>
 			</section>
 			<section>
 				<h2>Plans</h2>
 				<p>
-					I am working on adding first person camera controls. <br />
-					I will then work on making it possible to render multiple objects at once. <br />
-					After that, I may try to add a GUI or explore ray tracing / compute shaders. <br />
+					I would like to make it possible to have multiple graphics pipelines and render passes in order to create real applications. <br />
+					I could then explore the compute pipelines as well as ray tracing. <br />
+					I may work on adding a GUI around Fraus to make it easier to edit scenes.
 				</p>
 			</section>
 		</main>
