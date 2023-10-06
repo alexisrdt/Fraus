@@ -12,21 +12,34 @@
 #include "utils.h"
 #include "../images/images.h"
 
+FR_DEFINE_VECTOR(FrPipeline, Pipeline)
+FR_DEFINE_VECTOR(FrUniformBuffer, UniformBuffer)
+FR_DEFINE_VECTOR(FrTexture, Texture)
+
 FrResult frCreateVulkanData(FrVulkanData* pVulkanData, const char* pName, uint32_t version)
 {
+	pVulkanData->swapchain = VK_NULL_HANDLE;
+	pVulkanData->pImages = NULL;
+	pVulkanData->pImageViews = NULL;
+	pVulkanData->pFramebuffers = NULL;
+
+	if(frCreateVulkanObjectVector(&pVulkanData->objects) != FR_SUCCESS) return EXIT_FAILURE;
+	if(frCreatePipelineVector(&pVulkanData->graphicsPipelines) != FR_SUCCESS) return EXIT_FAILURE;
+	if(frCreateUniformBufferVector(&pVulkanData->uniformBuffers) != FR_SUCCESS) return EXIT_FAILURE;
+	if(frCreateTextureVector(&pVulkanData->textures) != FR_SUCCESS) return EXIT_FAILURE;
+
 	if(frCreateInstance(pVulkanData, pName, version) != FR_SUCCESS) return EXIT_FAILURE;
 	if(frCreateSurface(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
 	if(frChoosePhysicalDevice(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
 	if(frCreateDevice(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
 	if(frCreateSwapchain(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
 	if(frCreateRenderPass(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
-	if(frCreateGraphicsPipeline(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
 	if(frCreateColorImage(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
 	if(frCreateDepthImage(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
 	if(frCreateFramebuffers(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
 	if(frCreateCommandPools(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
 	if(frCreateSampler(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
-	if(frCreateUniformBuffer(pVulkanData) != FR_SUCCESS) return EXIT_FAILURE;
+	if(frCreateUniformBuffer(pVulkanData, sizeof(float[16])) != FR_SUCCESS) return EXIT_FAILURE; // Camera transform buffer
 
 	return FR_SUCCESS;
 }
@@ -53,19 +66,40 @@ FrResult frDestroyVulkanData(FrVulkanData* pVulkanData)
 		pVulkanData->functions.vkDestroyFence(pVulkanData->device, pVulkanData->frameInFlightFences[i], NULL);
 	}
 	pVulkanData->functions.vkDestroySampler(pVulkanData->device, pVulkanData->textureSampler, NULL);
-	for(uint32_t i = 0; i < FR_FRAMES_IN_FLIGHT; ++i)
+	
+	for(uint32_t textureIndex = 0; textureIndex < pVulkanData->textures.size; ++textureIndex)
 	{
-		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, pVulkanData->viewProjectionBuffers[i], NULL);
-		pVulkanData->functions.vkFreeMemory(pVulkanData->device, pVulkanData->viewProjectionBufferMemories[i], NULL);
+		pVulkanData->functions.vkDestroyImageView(pVulkanData->device, pVulkanData->textures.pData[textureIndex].imageView, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, pVulkanData->textures.pData[textureIndex].image, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, pVulkanData->textures.pData[textureIndex].imageMemory, NULL);
 	}
+	frDestroyTextureVector(&pVulkanData->textures);
+
+	for(uint32_t uniformBufferIndex = 0; uniformBufferIndex < pVulkanData->uniformBuffers.size; ++uniformBufferIndex)
+	{
+		for(uint32_t frameIndex = 0; frameIndex < FR_FRAMES_IN_FLIGHT; ++frameIndex)
+		{
+			pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, pVulkanData->uniformBuffers.pData[uniformBufferIndex].buffers[frameIndex], NULL);
+			pVulkanData->functions.vkFreeMemory(pVulkanData->device, pVulkanData->uniformBuffers.pData[uniformBufferIndex].bufferMemories[frameIndex], NULL);
+		}
+	}
+	frDestroyUniformBufferVector(&pVulkanData->uniformBuffers);
+
 	for(uint32_t objectIndex = 0; objectIndex < pVulkanData->objects.size; ++objectIndex)
 	{
 		frDestroyObject(pVulkanData, &pVulkanData->objects.pData[objectIndex]);
 	}
 	frDestroyVulkanObjectVector(&pVulkanData->objects);
-	pVulkanData->functions.vkDestroyPipeline(pVulkanData->device, pVulkanData->graphicsPipeline, NULL);
-	pVulkanData->functions.vkDestroyPipelineLayout(pVulkanData->device, pVulkanData->pipelineLayout, NULL);
-	pVulkanData->functions.vkDestroyDescriptorSetLayout(pVulkanData->device, pVulkanData->descriptorSetLayout, NULL);
+
+	for(uint32_t pipelineIndex = 0; pipelineIndex < pVulkanData->graphicsPipelines.size; ++pipelineIndex)
+	{
+		pVulkanData->functions.vkDestroyPipeline(pVulkanData->device, pVulkanData->graphicsPipelines.pData[pipelineIndex].pipeline, NULL);
+		pVulkanData->functions.vkDestroyPipelineLayout(pVulkanData->device, pVulkanData->graphicsPipelines.pData[pipelineIndex].pipelineLayout, NULL);
+		pVulkanData->functions.vkDestroyDescriptorSetLayout(pVulkanData->device, pVulkanData->graphicsPipelines.pData[pipelineIndex].descriptorSetLayout, NULL);
+		free(pVulkanData->graphicsPipelines.pData[pipelineIndex].pDescriptorTypes);
+	}
+	frDestroyPipelineVector(&pVulkanData->graphicsPipelines);
+
 	pVulkanData->functions.vkDestroyRenderPass(pVulkanData->device, pVulkanData->renderPass, NULL);
 	pVulkanData->functions.vkDestroyImageView(pVulkanData->device, pVulkanData->depthImageView, NULL);
 	pVulkanData->functions.vkDestroyImage(pVulkanData->device, pVulkanData->depthImage, NULL);
@@ -392,6 +426,7 @@ FrResult frCreateInstance(FrVulkanData* pVulkanData, const char* pName, uint32_t
 	{
 		FR_LOAD_INSTANCE_PFN(pVulkanData->functions, pVulkanData->instance, vkCreateDebugUtilsMessengerEXT)
 		FR_LOAD_INSTANCE_PFN(pVulkanData->functions, pVulkanData->instance, vkDestroyDebugUtilsMessengerEXT)
+		FR_LOAD_INSTANCE_PFN(pVulkanData->functions, pVulkanData->instance, vkSetDebugUtilsObjectNameEXT)
 	}
 #endif
 	FR_LOAD_INSTANCE_PFN(pVulkanData->functions, pVulkanData->instance, vkGetPhysicalDeviceSurfaceSupportKHR)
@@ -510,13 +545,6 @@ FrResult frCreateSurface(FrVulkanData* pVulkanData)
 	if(pVulkanData->functions.vkCreateXlibSurfaceKHR(pVulkanData->instance, &createInfo, NULL, &pVulkanData->surface) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 #endif
 
-	pVulkanData->swapchain = VK_NULL_HANDLE;
-	pVulkanData->pImages = NULL;
-	pVulkanData->pImageViews = NULL;
-	pVulkanData->pFramebuffers = NULL;
-
-	frCreateVulkanObjectVector(&pVulkanData->objects);
-
 	return FR_SUCCESS;
 }
 
@@ -611,9 +639,45 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	free(pAvailableLayers);
 #endif
 
-	if(pVulkanData->functions.vkCreateDevice(pVulkanData->physicalDevice, &createInfo, NULL, &pVulkanData->device) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(pVulkanData->functions.vkCreateDevice(pVulkanData->physicalDevice, &createInfo, NULL, &pVulkanData->device) != VK_SUCCESS)
+	{
+		free(ppFinalExtensions);
+		return FR_ERROR_UNKNOWN;
+	}
 
 	free(ppFinalExtensions);
+
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_INSTANCE,
+			.objectHandle = (uint64_t)pVulkanData->instance,
+			.pObjectName = "Instance"
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		nameInfo.objectType = VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->messenger;
+		nameInfo.pObjectName = "Messenger";
+
+		nameInfo.objectType = VK_OBJECT_TYPE_SURFACE_KHR;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->surface;
+		nameInfo.pObjectName = "Surface";
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		nameInfo.objectType = VK_OBJECT_TYPE_PHYSICAL_DEVICE;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->physicalDevice;
+		nameInfo.pObjectName = "Physical device";
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		nameInfo.objectType = VK_OBJECT_TYPE_DEVICE;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->device;
+		nameInfo.pObjectName = "Device";
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
 
 	FR_LOAD_DEVICE_PFN(pVulkanData->functions, pVulkanData->device, vkDestroyDevice)
 	FR_LOAD_DEVICE_PFN(pVulkanData->functions, pVulkanData->device, vkGetDeviceQueue)
@@ -690,6 +754,19 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 	FR_LOAD_DEVICE_PFN(pVulkanData->functions, pVulkanData->device, vkDeviceWaitIdle)
 
 	pVulkanData->functions.vkGetDeviceQueue(pVulkanData->device, pVulkanData->queueFamily, 0, &pVulkanData->queue);
+
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_QUEUE,
+			.objectHandle = (uint64_t)pVulkanData->queue,
+			.pObjectName = "Queue"
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
 
 	return FR_SUCCESS;
 }
@@ -792,21 +869,50 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 		return EXIT_FAILURE;
 	}
 
+	free(pSurfaceFormats);
+	free(pPresentModes);
+
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_SWAPCHAIN_KHR,
+			.objectHandle = (uint64_t)pVulkanData->swapchain,
+			.pObjectName = "Swapchain"
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
+
 	if(pVulkanData->functions.vkGetSwapchainImagesKHR(pVulkanData->device, pVulkanData->swapchain, &pVulkanData->imageCount, NULL) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	VkImage* pNewImages = realloc(pVulkanData->pImages, pVulkanData->imageCount * sizeof(VkImage));
 	if(!pNewImages) return FR_ERROR_UNKNOWN;
 	pVulkanData->pImages = pNewImages;
 	if(pVulkanData->functions.vkGetSwapchainImagesKHR(pVulkanData->device, pVulkanData->swapchain, &pVulkanData->imageCount, pVulkanData->pImages) != VK_SUCCESS)
 	{
-		free(pSurfaceFormats);
-		free(pPresentModes);
 		free(pVulkanData->pImages);
 		pVulkanData->pImages = NULL;
 		return FR_ERROR_UNKNOWN;
 	}
 
-	free(pSurfaceFormats);
-	free(pPresentModes);
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_IMAGE
+		};
+		char name[64];
+		for(uint32_t imageIndex = 0; imageIndex < pVulkanData->imageCount; ++imageIndex)
+		{
+			if(snprintf(name, sizeof(name), "Swapchain image %u", imageIndex) < 0) return FR_ERROR_UNKNOWN;
+			nameInfo.objectHandle = (uint64_t)pVulkanData->pImages[imageIndex];
+			nameInfo.pObjectName = name;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		}
+	}
+#endif
 
 	VkImageView* pNewImageViews = realloc(pVulkanData->pImageViews, pVulkanData->imageCount * sizeof(VkImageView));
 	if(!pNewImageViews)
@@ -830,6 +936,21 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 			pVulkanData->pImages = NULL;
 			return FR_ERROR_UNKNOWN;
 		}
+
+#ifndef NDEBUG
+		if(pVulkanData->debugExtensionAvailable)
+		{
+			char name[64];
+			if(snprintf(name, sizeof(name), "Swapchain image view %u", imageIndex) < 0) return FR_ERROR_UNKNOWN;
+			VkDebugUtilsObjectNameInfoEXT nameInfo = {
+				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+				.objectType = VK_OBJECT_TYPE_IMAGE_VIEW,
+				.objectHandle = (uint64_t)pVulkanData->pImageViews[imageIndex],
+				.pObjectName = name
+			};
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		}
+#endif
 	}
 
 	return FR_SUCCESS;
@@ -912,6 +1033,19 @@ FrResult frCreateRenderPass(FrVulkanData* pVulkanData)
 
 	if(pVulkanData->functions.vkCreateRenderPass(pVulkanData->device, &createInfo, NULL, &pVulkanData->renderPass) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_RENDER_PASS,
+			.objectHandle = (uint64_t)pVulkanData->renderPass,
+			.pObjectName = "Render pass"
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
+
 	return FR_SUCCESS;
 }
 
@@ -952,6 +1086,21 @@ FrResult frCreateFramebuffers(FrVulkanData* pVulkanData)
 			pVulkanData->pFramebuffers = NULL;
 			return FR_ERROR_UNKNOWN;
 		}
+
+#ifndef NDEBUG
+		if(pVulkanData->debugExtensionAvailable)
+		{
+			char name[64];
+			if(snprintf(name, sizeof(name), "Framebuffer %u", imageIndex) < 0) return FR_ERROR_UNKNOWN;
+			VkDebugUtilsObjectNameInfoEXT nameInfo = {
+				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+				.objectType = VK_OBJECT_TYPE_FRAMEBUFFER,
+				.objectHandle = (uint64_t)pVulkanData->pFramebuffers[imageIndex],
+				.pObjectName = name
+			};
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		}
+#endif
 	}
 
 	return FR_SUCCESS;
@@ -1010,15 +1159,36 @@ FrResult frCreateShaderModule(FrVulkanData* pVulkanData, const char* pPath, VkSh
 	// Free SPIR-V code
 	free(pCode);
 
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_SHADER_MODULE,
+			.objectHandle = (uint64_t)*pShaderModule,
+			.pObjectName = pPath[strlen(pPath) - 1] == 't' ? "Vertex shader module" : "Fragment shader module" // .vert / .frag
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
+
 	return FR_SUCCESS;
 }
 
-FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
+FrResult frCreateGraphicsPipeline(
+	FrVulkanData* pVulkanData,
+	const char* pVertexShaderPath,
+	const char* pFragmentShaderPath,
+	VkDescriptorSetLayoutBinding* pDescriptorSetLayoutBindings,
+	uint32_t descriptorSetLayoutBindingCount
+)
 {
+	if(frPushBackPipelineVector(&pVulkanData->graphicsPipelines, (FrPipeline){0}) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
 	// Shader stages
 	VkShaderModule vertexModule, fragmentModule;
-	if(frCreateShaderModule(pVulkanData, "vert.spv", &vertexModule) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
-	if(frCreateShaderModule(pVulkanData, "frag.spv", &fragmentModule) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(frCreateShaderModule(pVulkanData, pVertexShaderPath, &vertexModule) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(frCreateShaderModule(pVulkanData, pFragmentShaderPath, &fragmentModule) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	VkPipelineShaderStageCreateInfo stageInfos[] = {
 		{
@@ -1145,31 +1315,39 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 		.pDynamicStates = dynamics
 	};
 
-	// Descriptor set layout
-	VkDescriptorSetLayoutBinding bindings[] = {
-		{
-			.binding = 0,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-		},
-		{
-			.binding = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-		}
-	};
+	pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].descriptorTypeCount = descriptorSetLayoutBindingCount;
+	pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].pDescriptorTypes = malloc(descriptorSetLayoutBindingCount * sizeof(VkDescriptorType));
+	if(!pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].pDescriptorTypes) return FR_ERROR_OUT_OF_MEMORY;
+	for(uint32_t i = 0; i < descriptorSetLayoutBindingCount; ++i)
+	{
+		pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].pDescriptorTypes[i] = pDescriptorSetLayoutBindings[i].descriptorType;
+	}
 
 	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = sizeof(bindings) / sizeof(VkDescriptorSetLayoutBinding),
-		.pBindings = bindings
+		.bindingCount = descriptorSetLayoutBindingCount,
+		.pBindings = pDescriptorSetLayoutBindings
 	};
-	if(pVulkanData->functions.vkCreateDescriptorSetLayout(pVulkanData->device, &descriptorSetLayoutInfo, NULL, &pVulkanData->descriptorSetLayout) != VK_SUCCESS)
+	if(pVulkanData->functions.vkCreateDescriptorSetLayout(
+		pVulkanData->device,
+		&descriptorSetLayoutInfo,
+		NULL,
+		&pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].descriptorSetLayout
+	) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
 	{
-		return FR_ERROR_UNKNOWN;
+		char name[64];
+		if(snprintf(name, sizeof(name), "Descriptor set layout %zu", pVulkanData->graphicsPipelines.size - 1) < 0) return FR_ERROR_UNKNOWN;
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+			.objectHandle = (uint64_t)pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].descriptorSetLayout,
+			.pObjectName = name
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
+#endif
 
 	VkPushConstantRange pushConstantRange = {
 		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
@@ -1181,15 +1359,34 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 	VkPipelineLayoutCreateInfo layoutInfo = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 		.setLayoutCount = 1,
-		.pSetLayouts = &pVulkanData->descriptorSetLayout,
+		.pSetLayouts = &pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].descriptorSetLayout,
 		.pushConstantRangeCount = 1,
 		.pPushConstantRanges = &pushConstantRange
 	};
 
-	if(pVulkanData->functions.vkCreatePipelineLayout(pVulkanData->device, &layoutInfo, NULL, &pVulkanData->pipelineLayout) != VK_SUCCESS)
+	if(pVulkanData->functions.vkCreatePipelineLayout(
+		pVulkanData->device,
+		&layoutInfo,
+		NULL,
+		&pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].pipelineLayout
+	) != VK_SUCCESS)
 	{
 		return FR_ERROR_UNKNOWN;
 	}
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		char name[64];
+		if(snprintf(name, sizeof(name), "Pipeline layout %zu", pVulkanData->graphicsPipelines.size - 1) < 0) return FR_ERROR_UNKNOWN;
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+			.objectHandle = (uint64_t)pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].pipelineLayout,
+			.pObjectName = name
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
 
 	// Pipeline
 	VkGraphicsPipelineCreateInfo createInfo = {
@@ -1205,40 +1402,80 @@ FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData)
 		.pDepthStencilState = &depthStencil,
 		.pColorBlendState = &colorBlend,
 		.pDynamicState = &dynamic,
-		.layout = pVulkanData->pipelineLayout,
+		.layout = pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].pipelineLayout,
 		.renderPass = pVulkanData->renderPass,
 		.subpass = 0
 	};
 
-	if(pVulkanData->functions.vkCreateGraphicsPipelines(pVulkanData->device, VK_NULL_HANDLE, 1, &createInfo, NULL, &pVulkanData->graphicsPipeline) != VK_SUCCESS)
-	{
-		return FR_ERROR_UNKNOWN;
-	}
+	if(pVulkanData->functions.vkCreateGraphicsPipelines(
+		pVulkanData->device,
+		VK_NULL_HANDLE,
+		1,
+		&createInfo,
+		NULL,
+		&pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].pipeline
+	) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	pVulkanData->functions.vkDestroyShaderModule(pVulkanData->device, vertexModule, NULL);
 	pVulkanData->functions.vkDestroyShaderModule(pVulkanData->device, fragmentModule, NULL);
 
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		char name[64];
+		if(snprintf(name, sizeof(name), "Graphics pipeline %zu", pVulkanData->graphicsPipelines.size - 1) < 0) return FR_ERROR_UNKNOWN;
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_PIPELINE,
+			.objectHandle = (uint64_t)pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].pipeline,
+			.pObjectName = name
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
+
 	return FR_SUCCESS;
 }
 
-FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData)
+FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData, VkDeviceSize size)
 {
-	// Compute size
-	VkDeviceSize size = sizeof(float[16]);
+	if(frPushBackUniformBufferVector(&pVulkanData->uniformBuffers, (FrUniformBuffer){0}) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+	pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].buffersSize = size;
 
 	// Create uniform buffers
-	for(uint32_t i = 0; i < FR_FRAMES_IN_FLIGHT; ++i)
+	for(uint32_t frameIndex = 0; frameIndex < FR_FRAMES_IN_FLIGHT; ++frameIndex)
 	{
 		if(frCreateBuffer(
 			pVulkanData,
 			size,
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&pVulkanData->viewProjectionBuffers[i],
-			&pVulkanData->viewProjectionBufferMemories[i]
+			&pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].buffers[frameIndex],
+			&pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].bufferMemories[frameIndex]
 		) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
-		pVulkanData->functions.vkMapMemory(pVulkanData->device, pVulkanData->viewProjectionBufferMemories[i], 0, size, 0, &pVulkanData->pViewProjectionDatas[i]);
+		if(pVulkanData->functions.vkMapMemory(pVulkanData->device, pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].bufferMemories[frameIndex], 0, size, 0, &pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].pBufferDatas[frameIndex]) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+#ifndef NDEBUG
+		if(pVulkanData->debugExtensionAvailable)
+		{
+			char name[64];
+			if(snprintf(name, sizeof(name), "Uniform buffer %zu %u", pVulkanData->uniformBuffers.size - 1, frameIndex) < 0) return FR_ERROR_UNKNOWN;
+			VkDebugUtilsObjectNameInfoEXT nameInfo = {
+				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+				.objectType = VK_OBJECT_TYPE_BUFFER,
+				.objectHandle = (uint64_t)pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].buffers[frameIndex],
+				.pObjectName = name
+			};
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+			if(snprintf(name, sizeof(name), "Uniform buffer memory %zu %u", pVulkanData->uniformBuffers.size - 1, frameIndex) < 0) return FR_ERROR_UNKNOWN;
+			nameInfo.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
+			nameInfo.objectHandle = (uint64_t)pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].bufferMemories[frameIndex];
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		}
+#endif
 	}
 
 	return FR_SUCCESS;
@@ -1270,6 +1507,19 @@ FrResult frCreateSampler(FrVulkanData* pVulkanData)
 	};
 	if(pVulkanData->functions.vkCreateSampler(pVulkanData->device, &samplerCreateInfo, NULL, &pVulkanData->textureSampler) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_SAMPLER,
+			.objectHandle = (uint64_t)pVulkanData->textureSampler,
+			.pObjectName = "Texture sampler"
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
+
 	return FR_SUCCESS;
 }
 
@@ -1282,6 +1532,29 @@ FrResult frCreateColorImage(FrVulkanData* pVulkanData)
 		pVulkanData->functions.vkFreeMemory(pVulkanData->device, pVulkanData->colorImageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
+
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_IMAGE,
+			.objectHandle = (uint64_t)pVulkanData->colorImage,
+			.pObjectName = "Color image"
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		nameInfo.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->colorImageMemory;
+		nameInfo.pObjectName = "Color image memory";
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->colorImageView;
+		nameInfo.pObjectName = "Color image view";
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
 
 	return FR_SUCCESS;
 }
@@ -1312,6 +1585,29 @@ FrResult frCreateDepthImage(FrVulkanData* pVulkanData)
 		pVulkanData->functions.vkFreeMemory(pVulkanData->device, pVulkanData->depthImageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
+
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_IMAGE,
+			.objectHandle = (uint64_t)pVulkanData->depthImage,
+			.pObjectName = "Depth image"
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		nameInfo.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->depthImageMemory;
+		nameInfo.pObjectName = "Depth image memory";
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->depthImageView;
+		nameInfo.pObjectName = "Depth image view";
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
 
 	return FR_SUCCESS;
 }
@@ -1363,13 +1659,13 @@ static FrResult frRecordCommandBuffer(FrVulkanData* pVulkanData, uint32_t thread
 	{
 		const FrVulkanObject* pObject = &pVulkanData->objects.pData[objectIndex];
 
-		pVulkanData->functions.vkCmdBindPipeline(pVulkanData->pSecondaryCommandBuffers[commandBufferIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pVulkanData->graphicsPipeline);
+		pVulkanData->functions.vkCmdBindPipeline(pVulkanData->pSecondaryCommandBuffers[commandBufferIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pVulkanData->graphicsPipelines.pData[pObject->pipelineIndex].pipeline);
 
 		pVulkanData->functions.vkCmdBindVertexBuffers(pVulkanData->pSecondaryCommandBuffers[commandBufferIndex], 0, 1, &pObject->buffer, pOffsets);
 		pVulkanData->functions.vkCmdBindIndexBuffer(pVulkanData->pSecondaryCommandBuffers[commandBufferIndex], pObject->buffer, pObject->vertexCount * sizeof(FrVertex), VK_INDEX_TYPE_UINT32);
 
-		pVulkanData->functions.vkCmdBindDescriptorSets(pVulkanData->pSecondaryCommandBuffers[commandBufferIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pVulkanData->pipelineLayout, 0, 1, &pObject->descriptorSets[pVulkanData->frameInFlightIndex], 0, NULL);
-		pVulkanData->functions.vkCmdPushConstants(pVulkanData->pSecondaryCommandBuffers[commandBufferIndex], pVulkanData->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pObject->transformation), pObject->transformation);
+		pVulkanData->functions.vkCmdBindDescriptorSets(pVulkanData->pSecondaryCommandBuffers[commandBufferIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pVulkanData->graphicsPipelines.pData[pObject->pipelineIndex].pipelineLayout, 0, 1, &pObject->descriptorSets[pVulkanData->frameInFlightIndex], 0, NULL);
+		pVulkanData->functions.vkCmdPushConstants(pVulkanData->pSecondaryCommandBuffers[commandBufferIndex], pVulkanData->graphicsPipelines.pData[pObject->pipelineIndex].pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pObject->transformation), pObject->transformation);
 
 		pVulkanData->functions.vkCmdDrawIndexed(pVulkanData->pSecondaryCommandBuffers[commandBufferIndex], pObject->indexCount, 1, 0, 0, 0);
 	}
@@ -1472,6 +1768,21 @@ FrResult frCreateCommandPools(FrVulkanData* pVulkanData)
 		};
 		if(pVulkanData->functions.vkCreateCommandPool(pVulkanData->device, &createInfo, NULL, &pVulkanData->pCommandPools[i]) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
+#ifndef NDEBUG
+		if(pVulkanData->debugExtensionAvailable)
+		{
+			char name[64];
+			if(snprintf(name, sizeof(name), "Command pool thread %u frame %u", i % pVulkanData->threadCount, i / pVulkanData->threadCount) < 0) return FR_ERROR_UNKNOWN;
+			VkDebugUtilsObjectNameInfoEXT nameInfo = {
+				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+				.objectType = VK_OBJECT_TYPE_COMMAND_POOL,
+				.objectHandle = (uint64_t)pVulkanData->pCommandPools[i],
+				.pObjectName = name
+			};
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		}
+#endif
+
 		if(i % pVulkanData->threadCount == 0)
 		{
 			VkCommandBufferAllocateInfo allocateInfo = {
@@ -1481,6 +1792,21 @@ FrResult frCreateCommandPools(FrVulkanData* pVulkanData)
 				.commandBufferCount = 1
 			};
 			if(pVulkanData->functions.vkAllocateCommandBuffers(pVulkanData->device, &allocateInfo, &pVulkanData->pPrimaryCommandBuffers[i / pVulkanData->threadCount]) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+#ifndef NDEBUG
+			if(pVulkanData->debugExtensionAvailable)
+			{
+				char name[64];
+				if(snprintf(name, sizeof(name), "Primary command buffer %u", i / pVulkanData->threadCount) < 0) return FR_ERROR_UNKNOWN;
+				VkDebugUtilsObjectNameInfoEXT nameInfo = {
+					.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+					.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER,
+					.objectHandle = (uint64_t)pVulkanData->pPrimaryCommandBuffers[i / pVulkanData->threadCount],
+					.pObjectName = name
+				};
+				if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			}
+#endif
 		}
 
 		VkCommandBufferAllocateInfo allocateInfo = {
@@ -1490,6 +1816,21 @@ FrResult frCreateCommandPools(FrVulkanData* pVulkanData)
 			.commandBufferCount = 1
 		};
 		if(pVulkanData->functions.vkAllocateCommandBuffers(pVulkanData->device, &allocateInfo, &pVulkanData->pSecondaryCommandBuffers[i]) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+#ifndef NDEBUG
+		if(pVulkanData->debugExtensionAvailable)
+		{
+			char name[64];
+			if(snprintf(name, sizeof(name), "Secondary command buffer %u frame %u", i % pVulkanData->threadCount, i / pVulkanData->threadCount) < 0) return FR_ERROR_UNKNOWN;
+			VkDebugUtilsObjectNameInfoEXT nameInfo = {
+				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+				.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER,
+				.objectHandle = (uint64_t)pVulkanData->pSecondaryCommandBuffers[i],
+				.pObjectName = name
+			};
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		}
+#endif
 	}
 
 	for(uint32_t i = 0; i < FR_FRAMES_IN_FLIGHT; ++i)
@@ -1504,6 +1845,30 @@ FrResult frCreateCommandPools(FrVulkanData* pVulkanData)
 		if(pVulkanData->functions.vkCreateSemaphore(pVulkanData->device, &semaphoreCreateInfo, NULL, &pVulkanData->imageAvailableSemaphores[i]) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		if(pVulkanData->functions.vkCreateSemaphore(pVulkanData->device, &semaphoreCreateInfo, NULL, &pVulkanData->renderFinishedSemaphores[i]) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		if(pVulkanData->functions.vkCreateFence(pVulkanData->device, &fenceCreateInfo, NULL, &pVulkanData->frameInFlightFences[i]) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+
+#ifndef NDEBUG
+		if(pVulkanData->debugExtensionAvailable)
+		{
+			char name[64];
+			if(snprintf(name, sizeof(name), "Image available semaphore %u", i) < 0) return FR_ERROR_UNKNOWN;
+			VkDebugUtilsObjectNameInfoEXT nameInfo = {
+				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+				.objectType = VK_OBJECT_TYPE_SEMAPHORE,
+				.objectHandle = (uint64_t)pVulkanData->imageAvailableSemaphores[i],
+				.pObjectName = name
+			};
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+			if(snprintf(name, sizeof(name), "Render finished semaphore %u", i) < 0) return FR_ERROR_UNKNOWN;
+			nameInfo.objectHandle = (uint64_t)pVulkanData->renderFinishedSemaphores[i];
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+			if(snprintf(name, sizeof(name), "Frame in flight fence %u", i) < 0) return FR_ERROR_UNKNOWN;
+			nameInfo.objectType = VK_OBJECT_TYPE_FENCE;
+			nameInfo.objectHandle = (uint64_t)pVulkanData->frameInFlightFences[i];
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		}
+#endif
 	}
 
 	return FR_SUCCESS;
@@ -1562,7 +1927,7 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 	// Update camera
 	static float cameraMatrix[16];
 	frGetCameraMatrix(&pVulkanData->pApplication->camera, cameraMatrix);
-	memcpy(pVulkanData->pViewProjectionDatas[pVulkanData->frameInFlightIndex], cameraMatrix, sizeof(float[16]));
+	memcpy(pVulkanData->uniformBuffers.pData[0].pBufferDatas[pVulkanData->frameInFlightIndex], cameraMatrix, sizeof(cameraMatrix));
 
 	// Record command buffers to draw objects
 	pVulkanData->frameFinishedThreadCount = 0;

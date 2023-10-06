@@ -20,7 +20,7 @@ typedef struct FrInflateIterator
 {
 	const uint8_t* pData;
 	size_t size;
-	size_t iterator;
+	uint8_t iterator;
 } FrInflateIterator;
 
 /*
@@ -68,7 +68,8 @@ typedef struct FrInflateSubTableEntry
  */
 typedef struct FrInflateTableEntry
 {
-	union{
+	union
+	{
 		FrInflateSubTableEntry* pSubTable;
 		uint16_t symbol;
 	};
@@ -177,13 +178,13 @@ static FrResult frMSBFBits(FrInflateIterator* pIterator, uint8_t count, uint16_t
 static void frReturnBits(FrInflateIterator* pIterator, uint8_t count)
 {
 	// Count how many whole bytes are to be returned
-	div_t byteRatio = div(count, 8);
-	uint8_t overflow = byteRatio.rem > pIterator->iterator ? 1 : 0;
+	const div_t byteRatio = div(count, 8);
+	const uint8_t overflow = byteRatio.rem > pIterator->iterator ? 1 : 0;
 
 	// Return the bits
 	pIterator->pData -= byteRatio.quot + overflow;
 	pIterator->size += byteRatio.quot + overflow;
-	pIterator->iterator += 8 * overflow - byteRatio.rem;
+	pIterator->iterator += (uint8_t)(8 * overflow - byteRatio.rem);
 }
 
 /*

@@ -155,7 +155,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			free(pTypeAndData);
 			free(pData);
 			fclose(file);
-			if (getc(file) == EOF) return FR_ERROR_CORRUPTED_FILE;
+			if(getc(file) == EOF) return FR_ERROR_CORRUPTED_FILE;
 			return FR_ERROR_UNKNOWN;
 		}
 		uint32_t length = FR_MSBF_TO_U32(pLengthBuffer);

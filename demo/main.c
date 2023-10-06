@@ -7,11 +7,18 @@
 
 #include <fraus/fraus.h>
 
-// Define flags
-// - sameForward: when true, the camera moves in the direction where it is looking
-// - maximized: when true, the window is maximized
-bool sameForward = false;
-bool maximized = false;
+/*
+ * Define flags
+ * - sameForward: when true, the camera moves in the direction where it is looking
+ * - maximized: when true, the window is maximized
+ * - capture: when true, the mouse is captured
+ */
+static bool sameForward = false;
+static bool maximized = false;
+static bool capture = true;
+
+// Color factor
+static FrVec3 factor = {0};
 
 /*
  * Key handler called each time a key is pressed or released
@@ -37,6 +44,19 @@ void myKeyHandler(FrKey key, FrKeyState state, FrWindow* pWindow)
 			maximized = !maximized;
 			ShowWindow(pWindow->handle, maximized ? SW_MAXIMIZE : SW_NORMAL);
 			break;
+
+		case FR_KEY_M:
+			capture = !capture;
+			frCaptureMouse(pWindow, capture);
+			break;
+
+		case FR_KEY_LEFT_MOUSE:
+			if(!capture)
+			{
+				capture = true;
+				frCaptureMouse(pWindow, capture);
+			}
+			break;
 	}
 }
 
@@ -48,14 +68,17 @@ void myKeyHandler(FrKey key, FrKeyState state, FrWindow* pWindow)
  */
 void myMouseMoveHandler(int32_t dx, int32_t dy, FrCamera* pCamera)
 {
-	// Update yaw
-	pCamera->yaw -= (float)dx * pCamera->rotationSpeed;
-	pCamera->yaw = fmodf(pCamera->yaw, 2.f * PI);
+	if(capture)
+	{
+		// Update yaw
+		pCamera->yaw -= (float)dx * pCamera->rotationSpeed;
+		pCamera->yaw = fmodf(pCamera->yaw, 2.f * PI);
 
-	// Update pitch
-	pCamera->pitch += (float)dy * pCamera->rotationSpeed;
-	if(pCamera->pitch < 0.01f) pCamera->pitch = 0.01f;
-	if(pCamera->pitch > PI - 0.01f) pCamera->pitch = PI - 0.01f;
+		// Update pitch
+		pCamera->pitch += (float)dy * pCamera->rotationSpeed;
+		if(pCamera->pitch < 0.01f) pCamera->pitch = 0.01f;
+		if(pCamera->pitch > PI - 0.01f) pCamera->pitch = PI - 0.01f;
+	}
 }
 
 // Define number of objects and buffer for lowest Zs
@@ -154,6 +177,57 @@ void myUpdateHandler(FrVulkanData* pVulkanData, float elapsed, FrCamera* pCamera
 		const FrVec3 movement = frScale(&movUp, -elapsed * pCamera->translationSpeed);
 		pCamera->position = frAdd(&pCamera->position, &movement);
 	}
+
+	// Update color factor
+	if(
+		frGetKeyState(FR_KEY_R) == FR_KEY_STATE_DOWN
+	)
+	{
+		factor.r += elapsed;
+		if(factor.r > 1.f) factor.r = 1.f;
+	}
+
+	if(
+		frGetKeyState(FR_KEY_T) == FR_KEY_STATE_DOWN
+	)
+	{
+		factor.r -= elapsed;
+		if(factor.r < 0.f) factor.r = 0.f;
+	}
+
+	if(
+		frGetKeyState(FR_KEY_G) == FR_KEY_STATE_DOWN
+	)
+	{
+		factor.g += elapsed;
+		if(factor.g > 1.f) factor.g = 1.f;
+	}
+
+	if(
+		frGetKeyState(FR_KEY_H) == FR_KEY_STATE_DOWN
+	)
+	{
+		factor.g -= elapsed;
+		if(factor.g < 0.f) factor.g = 0.f;
+	}
+
+	if(
+		frGetKeyState(FR_KEY_B) == FR_KEY_STATE_DOWN
+	)
+	{
+		factor.b += elapsed;
+		if(factor.b > 1.f) factor.b = 1.f;
+	}
+
+	if(
+		frGetKeyState(FR_KEY_N) == FR_KEY_STATE_DOWN
+	)
+	{
+		factor.b -= elapsed;
+		if(factor.b < 0.f) factor.b = 0.f;
+	}
+
+	memcpy(pVulkanData->uniformBuffers.pData[1].pBufferDatas[pVulkanData->frameInFlightIndex], &factor, sizeof(factor));
 }
 
 /*
@@ -170,13 +244,58 @@ int main(void)
 	frSetMouseMoveHandler(&application.window, myMouseMoveHandler, &application.camera);
 	frSetUpdateHandler(&application.vulkanData, myUpdateHandler, &application.camera);
 
+	// Capture mouse
+	frCaptureMouse(&application.window, capture);
+
 	// Initialize camera
-	application.camera.position = (FrVec3){.x = 2.f, .y = 2.f, .z = 2.f};
+	application.camera.position = (FrVec3){ .x = 2.f, .y = 2.f, .z = 2.f };
 	application.camera.yaw = 225.f * PI / 180.f;
 	application.camera.pitch = 2.f * PI / 3.f;
 
+	// Create pipelines
+	VkDescriptorSetLayoutBinding bindings[] = {
+		{
+			.binding = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+		},
+		{
+			.binding = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+		}
+	};
+	if(frCreateGraphicsPipeline(&application.vulkanData, "vert.spv", "frag.spv", bindings, sizeof(bindings) / sizeof(bindings[0])) != FR_SUCCESS) return EXIT_FAILURE;
+
+	VkDescriptorSetLayoutBinding phongBindings[] = {
+		{
+			.binding = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+		},
+		{
+			.binding = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+		},
+		{
+			.binding = 2,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+		}
+	};
+	if(frCreateGraphicsPipeline(&application.vulkanData, "vert.spv", "other.spv", phongBindings, sizeof(phongBindings) / sizeof(phongBindings[0])) != FR_SUCCESS) return EXIT_FAILURE;
+
+	// Create color factor uniform buffer
+	if(frCreateUniformBuffer(&application.vulkanData, sizeof(FrVec3)) != FR_SUCCESS) return EXIT_FAILURE;
+
 	// Create objects
-	#define BUFFER_SIZE 32
+#define BUFFER_SIZE 32
 	char modelFileName[BUFFER_SIZE];
 	char textureFileName[BUFFER_SIZE];
 	for(uint32_t objectIndex = 0; objectIndex < OBJECT_COUNT; ++objectIndex)
@@ -184,7 +303,13 @@ int main(void)
 		if(snprintf(modelFileName, BUFFER_SIZE, "model_%d.obj", objectIndex) < 0) return EXIT_FAILURE;
 		if(snprintf(textureFileName, BUFFER_SIZE, "texture_%d.png", objectIndex) < 0) return EXIT_FAILURE;
 
-		if(frCreateObject(&application.vulkanData, modelFileName, textureFileName) != FR_SUCCESS) return EXIT_FAILURE;
+		if(frCreateTexture(&application.vulkanData, textureFileName) != FR_SUCCESS) return EXIT_FAILURE;
+		if(frCreateObject(
+			&application.vulkanData,
+			modelFileName,
+			objectIndex == 2 ? 1 : 0,
+			objectIndex == 2 ? (uint32_t[]) { 0, objectIndex, 1 } : (uint32_t[]) { 0, objectIndex }
+		) != FR_SUCCESS) return EXIT_FAILURE;
 
 		lowestZs[objectIndex] = FLT_MAX;
 		for(uint32_t vertexIndex = 0; vertexIndex < application.vulkanData.objects.pData[objectIndex].vertexCount; ++vertexIndex)

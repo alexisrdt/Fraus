@@ -93,6 +93,7 @@ typedef struct FrWindow
 #endif
 	FrEventHandlers handlers;
 	bool resized;
+	bool capture;
 
 } FrWindow;
 
@@ -108,6 +109,13 @@ FrResult frCreateWindow(const char* pTitle, FrWindow* pWindow);
  * - pWindow: pointer to the window
  */
 void frDestroyWindow(FrWindow* pWindow);
+
+/*
+ * Capture the mouse
+ * - pWindow: pointer to the window
+ * - capture: true to capture the mouse, false to release it
+ */
+void frCaptureMouse(FrWindow* pWindow, bool capture);
 
 /*
  * Get the state of a key

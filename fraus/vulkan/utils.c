@@ -36,6 +36,19 @@ FrResult frBeginCommandBuffer(FrVulkanData* pVulkanData, VkCommandBuffer* pComma
 	};
 	if(pVulkanData->functions.vkAllocateCommandBuffers(pVulkanData->device, &allocateInfo, pCommandBuffer) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER,
+			.objectHandle = (uint64_t)*pCommandBuffer,
+			.pObjectName = "Temporary command buffer"
+		};
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
+
 	// Begin command buffer
 	VkCommandBufferBeginInfo beginInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -368,8 +381,10 @@ static FrResult frGenerateMipmap(FrVulkanData* pVulkanData, VkImage image, VkFor
 	return FR_SUCCESS;
 }
 
-FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath, VkDeviceMemory* pImageMemory, VkImage* pImage, VkImageView* pImageView)
+FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath)
 {
+	if(frPushBackTextureVector(&pVulkanData->textures, (FrTexture){0}) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
 	// Load image
 	FrImage image;
 	if(frLoadPNG(pPath, &image) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
@@ -445,8 +460,8 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath, VkDeviceM
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		pImage,
-		pImageMemory
+		&pVulkanData->textures.pData[pVulkanData->textures.size - 1].image,
+		&pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageMemory
 	) != VK_SUCCESS)
 	{
 		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
@@ -455,19 +470,19 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath, VkDeviceM
 	}
 
 	// Copy data to image
-	if(frTransitionImageLayout(pVulkanData, *pImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, pVulkanData->textureMipLevels) != FR_SUCCESS)
+	if(frTransitionImageLayout(pVulkanData, pVulkanData->textures.pData[pVulkanData->textures.size - 1].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, pVulkanData->textureMipLevels) != FR_SUCCESS)
 	{
-		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, pVulkanData->textures.pData[pVulkanData->textures.size - 1].image, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageMemory, NULL);
 		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
 		pVulkanData->functions.vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
-	if(frCopyBufferToImage(pVulkanData, stagingBuffer, *pImage, image.width, image.height) != FR_SUCCESS)
+	if(frCopyBufferToImage(pVulkanData, stagingBuffer, pVulkanData->textures.pData[pVulkanData->textures.size - 1].image, image.width, image.height) != FR_SUCCESS)
 	{
-		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, pVulkanData->textures.pData[pVulkanData->textures.size - 1].image, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageMemory, NULL);
 		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
 		pVulkanData->functions.vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 		return FR_ERROR_UNKNOWN;
@@ -477,28 +492,53 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath, VkDeviceM
 	pVulkanData->functions.vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
 
 	// Mipmap
-	if(frGenerateMipmap(pVulkanData, *pImage, VK_FORMAT_R8G8B8A8_SRGB, image.width, image.height, pVulkanData->textureMipLevels) != FR_SUCCESS)
+	if(frGenerateMipmap(pVulkanData, pVulkanData->textures.pData[pVulkanData->textures.size - 1].image, VK_FORMAT_R8G8B8A8_SRGB, image.width, image.height, pVulkanData->textureMipLevels) != FR_SUCCESS)
 	{
-		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, pVulkanData->textures.pData[pVulkanData->textures.size - 1].image, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
 
 	// If no mipmap
-	/* if(frTransitionImageLayout(pVulkanData, *pImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, pVulkanData->textureMipLevels) != FR_SUCCESS)
+	/* if(frTransitionImageLayout(pVulkanData, pVulkanData->textures.pData[pVulkanData->textures.size - 1].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, pVulkanData->textureMipLevels) != FR_SUCCESS)
 	{
-		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, pVulkanData->textures.pData[pVulkanData->textures.size - 1].image, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	} */
 
 	// Create image view
-	if(frCreateImageView(pVulkanData, *pImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, pVulkanData->textureMipLevels, pImageView) != FR_SUCCESS)
+	if(frCreateImageView(pVulkanData, pVulkanData->textures.pData[pVulkanData->textures.size - 1].image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, pVulkanData->textureMipLevels, &pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageView) != FR_SUCCESS)
 	{
-		pVulkanData->functions.vkDestroyImage(pVulkanData->device, *pImage, NULL);
-		pVulkanData->functions.vkFreeMemory(pVulkanData->device, *pImageMemory, NULL);
+		pVulkanData->functions.vkDestroyImage(pVulkanData->device, pVulkanData->textures.pData[pVulkanData->textures.size - 1].image, NULL);
+		pVulkanData->functions.vkFreeMemory(pVulkanData->device, pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageMemory, NULL);
 		return FR_ERROR_UNKNOWN;
 	}
+
+#ifndef NDEBUG
+	if(pVulkanData->debugExtensionAvailable)
+	{
+		char name[64];
+		if (snprintf(name, sizeof(name), "Texture %zu", pVulkanData->textures.size - 1) < 0) return FR_ERROR_UNKNOWN;
+		VkDebugUtilsObjectNameInfoEXT nameInfo = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_IMAGE,
+			.objectHandle = (uint64_t)pVulkanData->textures.pData[pVulkanData->textures.size - 1].image,
+			.pObjectName = name
+		};
+		if (pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		if (snprintf(name, sizeof(name), "Texture memory %zu", pVulkanData->textures.size - 1) < 0) return FR_ERROR_UNKNOWN;
+		nameInfo.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageMemory;
+		if (pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+
+		if (snprintf(name, sizeof(name), "Texture image view %zu", pVulkanData->textures.size - 1) < 0) return FR_ERROR_UNKNOWN;
+		nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
+		nameInfo.objectHandle = (uint64_t)pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageView;
+		if (pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	}
+#endif
 
 	return FR_SUCCESS;
 }

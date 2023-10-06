@@ -36,9 +36,7 @@ typedef struct FrVulkanObject
 
 	float transformation[16];
 
-	VkDeviceMemory textureMemory;
-	VkImage textureImage;
-	VkImageView textureImageView;
+	uint32_t pipelineIndex;
 
 	VkDescriptorPool descriptorPool;
 	VkDescriptorSet descriptorSets[FR_FRAMES_IN_FLIGHT];
@@ -55,6 +53,7 @@ typedef struct FrVulkanFunctions
 #ifndef NDEBUG
 	FR_DECLARE_PFN(vkCreateDebugUtilsMessengerEXT)
 	FR_DECLARE_PFN(vkDestroyDebugUtilsMessengerEXT)
+	FR_DECLARE_PFN(vkSetDebugUtilsObjectNameEXT)
 #endif
 	FR_DECLARE_PFN(vkEnumeratePhysicalDevices)
 	FR_DECLARE_PFN(vkGetPhysicalDeviceProperties)
@@ -156,6 +155,36 @@ typedef struct FrApplication FrApplication;
 
 typedef struct FrThreadData FrThreadData;
 
+typedef struct FrPipeline
+{
+	VkDescriptorType* pDescriptorTypes;
+	uint32_t descriptorTypeCount;
+	VkDescriptorSetLayout descriptorSetLayout;
+	VkPipelineLayout pipelineLayout;
+	VkPipeline pipeline;
+} FrPipeline;
+
+FR_DECLARE_VECTOR(FrPipeline, Pipeline)
+
+typedef struct FrUniformBuffer
+{
+	VkBuffer buffers[FR_FRAMES_IN_FLIGHT];
+	VkDeviceSize buffersSize;
+	VkDeviceMemory bufferMemories[FR_FRAMES_IN_FLIGHT];
+	void* pBufferDatas[FR_FRAMES_IN_FLIGHT];
+} FrUniformBuffer;
+
+FR_DECLARE_VECTOR(FrUniformBuffer, UniformBuffer)
+
+typedef struct FrTexture
+{
+	VkImage image;
+	VkDeviceMemory imageMemory;
+	VkImageView imageView;
+} FrTexture;
+
+FR_DECLARE_VECTOR(FrTexture, Texture)
+
 typedef struct FrVulkanData
 {
 	FrApplication* pApplication;
@@ -180,12 +209,9 @@ typedef struct FrVulkanData
 	VkFramebuffer* pFramebuffers;
 	uint32_t imageCount;
 	VkRenderPass renderPass;
-	VkDescriptorSetLayout descriptorSetLayout;
-	VkPipelineLayout pipelineLayout;
-	VkPipeline graphicsPipeline;
-	VkBuffer viewProjectionBuffers[FR_FRAMES_IN_FLIGHT];
-	VkDeviceMemory viewProjectionBufferMemories[FR_FRAMES_IN_FLIGHT];
-	void* pViewProjectionDatas[FR_FRAMES_IN_FLIGHT];
+	FrPipelineVector graphicsPipelines;
+	FrUniformBufferVector uniformBuffers;
+	FrTextureVector textures;
 	uint32_t textureMipLevels;
 	VkSampleCountFlagBits msaaSamples;
 	FrVulkanObjectVector objects;

@@ -18,8 +18,14 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData);
 FrResult frCreateRenderPass(FrVulkanData* pVulkanData);
 FrResult frCreateFramebuffers(FrVulkanData* pVulkanData);
 FrResult frCreateShaderModule(FrVulkanData* pVulkanData, const char* pPath, VkShaderModule* pShaderModule);
-FrResult frCreateGraphicsPipeline(FrVulkanData* pVulkanData);
-FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData);
+FrResult frCreateGraphicsPipeline(
+	FrVulkanData* pVulkanData,
+	const char* pVertexShaderPath,
+	const char* pFragmentShaderPath,
+	VkDescriptorSetLayoutBinding* pDescriptorSetLayoutBindings,
+	uint32_t descriptorSetLayoutBindingCount
+);
+FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData, VkDeviceSize size);
 FrResult frCreateSampler(FrVulkanData* pVulkanData);
 FrResult frCreateColorImage(FrVulkanData* pVulkanData);
 FrResult frCreateDepthImage(FrVulkanData* pVulkanData);

@@ -134,26 +134,27 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 	switch(message)
 	{
 		case WM_CREATE:
-			{
-				// Register mouse device
-				RAWINPUTDEVICE device = {
-					.usUsagePage = 1,
-					.usUsage = 2,
-					.dwFlags = 0,
-					.hwndTarget = handle
-				};
-				RegisterRawInputDevices(&device, 1, sizeof(RAWINPUTDEVICE));
-			}
+		{
+			// Register mouse device
+			RAWINPUTDEVICE device = {
+				.usUsagePage = 1,
+				.usUsage = 2,
+				.dwFlags = 0,
+				.hwndTarget = handle
+			};
+			RegisterRawInputDevices(&device, 1, sizeof(RAWINPUTDEVICE));
+
 			break;
+		}
 
 		case WM_SETFOCUS:
 			// Hide cursor
-			ShowCursor(false);
+			if(pWindow->capture) ShowCursor(false);
 			break;
 
 		case WM_KILLFOCUS:
 			// Show cursor
-			ShowCursor(true);
+			if(pWindow->capture) ShowCursor(true);
 			break;
 
 		case WM_INPUT:
@@ -186,13 +187,16 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 				}
 
 				// Center cursor
-				RECT windowRect;
-				GetWindowRect(handle, &windowRect);
+				if(pWindow->capture)
+				{
+					RECT windowRect;
+					GetWindowRect(handle, &windowRect);
 
-				SetCursorPos(
-					windowRect.left + (windowRect.right - windowRect.left) / 2,
-					windowRect.top + (windowRect.bottom - windowRect.top) / 2
-				);
+					SetCursorPos(
+						windowRect.left + (windowRect.right - windowRect.left) / 2,
+						windowRect.top + (windowRect.bottom - windowRect.top) / 2
+					);
+				}
 			}
 			break;
 
@@ -221,19 +225,25 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 			break;
 
 		case WM_SIZE:
+		{
 			pWindow->resized = true;
 
 			// Get window rect and set cursor position
-			RECT windowRect;
-			GetWindowRect(handle, &windowRect);
+			if(pWindow->capture)
+			{
+				RECT windowRect;
+				GetWindowRect(handle, &windowRect);
 
-			SetCursorPos(
-				windowRect.left + (windowRect.right - windowRect.left) / 2,
-				windowRect.top + (windowRect.bottom - windowRect.top) / 2
-			);
+				SetCursorPos(
+					windowRect.left + (windowRect.right - windowRect.left) / 2,
+					windowRect.top + (windowRect.bottom - windowRect.top) / 2
+				);
+			}
 
 			if(pWindow->handlers.resizeHandler) pWindow->handlers.resizeHandler(LOWORD(lParam), HIWORD(lParam), pWindow->handlers.pResizeHandlerUserData);
+
 			break;
+		}
 
 		case WM_CLOSE:
 			DestroyWindow(handle);
@@ -322,12 +332,13 @@ FrResult frCreateWindow(const char* pTitle, FrWindow* pWindow)
 	++windowCount;
 
 	// Setup window data
+	pWindow->resized = false;
+	pWindow->capture = false;
 	memset(&pWindow->handlers, 0, sizeof(FrEventHandlers));
 	SetProp(pWindow->handle, TEXT("FrWindow"), (HANDLE)pWindow);
 
 	// Show window
 	ShowWindow(pWindow->handle, SW_SHOW);
-	pWindow->resized = false;
 #endif
 
 	return FR_SUCCESS;
@@ -342,6 +353,29 @@ void frDestroyWindow(FrWindow* pWindow)
 #ifdef _WIN32
 	DestroyWindow(pWindow->handle);
 #endif
+}
+
+/*
+ * Capture the mouse
+ * - pWindow: pointer to the window
+ * - capture: true to capture the mouse, false to release it
+ */
+void frCaptureMouse(FrWindow* pWindow, bool capture)
+{
+	pWindow->capture = capture;
+
+	if(capture)
+	{
+		RECT windowRect;
+		GetWindowRect(pWindow->handle, &windowRect);
+
+		SetCursorPos(
+			windowRect.left + (windowRect.right - windowRect.left) / 2,
+			windowRect.top + (windowRect.bottom - windowRect.top) / 2
+		);
+	}
+
+	ShowCursor(!capture);
 }
 
 /*
