@@ -1,4 +1,4 @@
-#include "map.h"
+#include "../../include/fraus/models/map.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -14,18 +14,33 @@ FrResult frCreateMap(uint32_t size, FrMap* pMap)
 	return FR_SUCCESS;
 }
 
+typedef union FrFloat
+{
+	float value;
+	uint32_t bits;
+} FrFloat;
+
 static inline uint32_t frHash(const FrVertex* pVertex)
 {
 	uint32_t hash = 65521;
 
-	hash ^= *(uint32_t*)&pVertex->position.x * 2;
-	hash ^= *(uint32_t*)&pVertex->position.y * 3;
-	hash ^= *(uint32_t*)&pVertex->position.z * 5;
-	hash ^= *(uint32_t*)&pVertex->textureCoordinates.u * 7;
-	hash ^= *(uint32_t*)&pVertex->textureCoordinates.v * 11;
-	hash ^= *(uint32_t*)&pVertex->normal.x * 13;
-	hash ^= *(uint32_t*)&pVertex->normal.y * 17;
-	hash ^= *(uint32_t*)&pVertex->normal.z * 19;
+	FrFloat positionX = { .value = pVertex->position.x };
+	FrFloat positionY = { .value = pVertex->position.y };
+	FrFloat positionZ = { .value = pVertex->position.z };
+	FrFloat textureU = { .value = pVertex->textureCoordinates.u };
+	FrFloat textureV = { .value = pVertex->textureCoordinates.v };
+	FrFloat normalX = { .value = pVertex->normal.x };
+	FrFloat normalY = { .value = pVertex->normal.y };
+	FrFloat normalZ = { .value = pVertex->normal.z };
+
+	hash ^= positionX.bits * 2;
+	hash ^= positionY.bits * 3;
+	hash ^= positionZ.bits * 5;
+	hash ^= textureU.bits * 7;
+	hash ^= textureV.bits * 11;
+	hash ^= normalX.bits * 13;
+	hash ^= normalY.bits * 17;
+	hash ^= normalZ.bits * 19;
 
 	return hash;
 }

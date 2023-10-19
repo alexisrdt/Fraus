@@ -5,14 +5,14 @@
 #error C99 required
 #endif
 
-#include "camera.h"
-#include "images/images.h"
-#include "math.h"
-#include "models/models.h"
-#include "threads.h"
-#include "utils.h"
-#include "vulkan/vulkan.h"
-#include "window.h"
+#include "./camera.h"
+#include "./images/images.h"
+#include "./math.h"
+#include "./models/models.h"
+#include "./threads.h"
+#include "./utils.h"
+#include "./vulkan/vulkan.h"
+#include "./window.h"
 
 typedef struct FrApplication
 {

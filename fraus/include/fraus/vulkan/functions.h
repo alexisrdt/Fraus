@@ -1,7 +1,7 @@
 #ifndef FRAUS_VULKAN_FUNCTIONS_H
 #define FRAUS_VULKAN_FUNCTIONS_H
 
-#include "include.h"
+#include "./include.h"
 
 /* Macros */
 
@@ -22,10 +22,10 @@ if(!functions.name) return FR_ERROR_UNKNOWN;
 
 /* Function pointers */
 
-FR_DECLARE_PFN(vkGetInstanceProcAddr)
+extern FR_DECLARE_PFN(vkGetInstanceProcAddr)
 
-FR_DECLARE_PFN(vkCreateInstance)
-FR_DECLARE_PFN(vkEnumerateInstanceLayerProperties)
-FR_DECLARE_PFN(vkEnumerateInstanceExtensionProperties)
+extern FR_DECLARE_PFN(vkCreateInstance)
+extern FR_DECLARE_PFN(vkEnumerateInstanceLayerProperties)
+extern FR_DECLARE_PFN(vkEnumerateInstanceExtensionProperties)
 
 #endif

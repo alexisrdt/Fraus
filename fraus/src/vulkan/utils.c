@@ -1,9 +1,11 @@
-#include "utils.h"
+#include "../../include/fraus/utils.h"
 
-#include "../images/images.h"
-#include "functions.h"
+#include "../../include/fraus/images/images.h"
+#include "../../include/fraus/vulkan/functions.h"
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 FrResult frFindMemoryTypeIndex(FrVulkanData* pVulkanData, uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* pIndex)
 {
@@ -45,7 +47,7 @@ FrResult frBeginCommandBuffer(FrVulkanData* pVulkanData, VkCommandBuffer* pComma
 			.objectHandle = (uint64_t)*pCommandBuffer,
 			.pObjectName = "Temporary command buffer"
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -430,7 +432,7 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath)
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 		&stagingBuffer,
 		&stagingBufferMemory
-	) != VK_SUCCESS)
+	) != FR_SUCCESS)
 	{
 		free(image.pData);
 		return FR_ERROR_UNKNOWN;
@@ -462,7 +464,7 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath)
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		&pVulkanData->textures.pData[pVulkanData->textures.size - 1].image,
 		&pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageMemory
-	) != VK_SUCCESS)
+	) != FR_SUCCESS)
 	{
 		pVulkanData->functions.vkDestroyBuffer(pVulkanData->device, stagingBuffer, NULL);
 		pVulkanData->functions.vkFreeMemory(pVulkanData->device, stagingBufferMemory, NULL);
@@ -526,17 +528,17 @@ FrResult frCreateTexture(FrVulkanData* pVulkanData, const char* pPath)
 			.objectHandle = (uint64_t)pVulkanData->textures.pData[pVulkanData->textures.size - 1].image,
 			.pObjectName = name
 		};
-		if (pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if (pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 		if (snprintf(name, sizeof(name), "Texture memory %zu", pVulkanData->textures.size - 1) < 0) return FR_ERROR_UNKNOWN;
 		nameInfo.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
 		nameInfo.objectHandle = (uint64_t)pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageMemory;
-		if (pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if (pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 		if (snprintf(name, sizeof(name), "Texture image view %zu", pVulkanData->textures.size - 1) < 0) return FR_ERROR_UNKNOWN;
 		nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
 		nameInfo.objectHandle = (uint64_t)pVulkanData->textures.pData[pVulkanData->textures.size - 1].imageView;
-		if (pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if (pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 

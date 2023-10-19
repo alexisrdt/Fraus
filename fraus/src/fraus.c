@@ -1,4 +1,4 @@
-#include "fraus.h"
+#include "../include/fraus/fraus.h"
 
 #include <stdlib.h>
 
@@ -25,6 +25,10 @@ static uint32_t frApplicationCount = 0;
  * - FR_ERROR_FILE_NOT_FOUND if the Vulkan library could not be found
  * - FR_ERROR_UNKNOWN if some other error occured
  */
+FR_DECLARE_PFN(vkGetInstanceProcAddr)
+FR_DECLARE_PFN(vkEnumerateInstanceLayerProperties)
+FR_DECLARE_PFN(vkEnumerateInstanceExtensionProperties)
+FR_DECLARE_PFN(vkCreateInstance)
 FrResult frCreateApplication(const char* pName, uint32_t version, FrApplication* pApplication)
 {
 	if(!frVulkanLibrary)
@@ -37,13 +41,13 @@ FrResult frCreateApplication(const char* pName, uint32_t version, FrApplication*
 		if(!vkGetInstanceProcAddr) return FR_ERROR_UNKNOWN;
 #else
 	#if defined(__APPLE__) || defined(__MACH__)
-		dlopen("libvulkan.dylib", RTLD_LAZY);
+		frVulkanLibrary = dlopen("libvulkan.dylib", RTLD_LAZY);
 	#else
-		dlopen("libvulkan.so", RTLD_LAZY);
+		frVulkanLibrary = dlopen("libvulkan.so", RTLD_LAZY);
 	#endif
 		if(!frVulkanLibrary) return FR_ERROR_FILE_NOT_FOUND;
 
-		vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(frVulkanLibrary, "vkGetInstanceProcAddr");
+		*(void**)(&vkGetInstanceProcAddr) = dlsym(frVulkanLibrary, "vkGetInstanceProcAddr");
 		if(!vkGetInstanceProcAddr) return FR_ERROR_UNKNOWN;
 #endif
 		FR_LOAD_GLOBAL_PFN(vkEnumerateInstanceLayerProperties)
@@ -162,5 +166,96 @@ int frMainLoop(FrApplication* pApplication)
 	if(pApplication->vulkanData.functions.vkDeviceWaitIdle(pApplication->vulkanData.device) != VK_SUCCESS) return EXIT_FAILURE;
 
 	return returnValue;
+#else
+	XEvent event;
+	while(true)
+	{
+		while(XQLength(pApplication->window.pDisplay) > 0)
+		{
+			XNextEvent(pApplication->window.pDisplay, &event);
+			switch(event.type)
+			{
+				case ConfigureNotify:
+				{
+					if(pApplication->window.handlers.resizeHandler)
+					{
+						pApplication->window.handlers.resizeHandler(
+							event.xconfigure.width,
+							event.xconfigure.height,
+							pApplication->window.handlers.pResizeHandlerUserData
+						);
+					}
+
+					pApplication->window.resized = true;
+
+					break;
+				}
+
+				case KeyPress:
+					if(pApplication->window.handlers.keyHandler)
+					{
+						KeySym keySym = XLookupKeysym(&event.xkey, 0);
+						pApplication->window.handlers.keyHandler(keySym, FR_KEY_STATE_DOWN, pApplication->window.handlers.pKeyHandlerUserData);
+					}
+					break;
+
+				case KeyRelease:
+					if(pApplication->window.handlers.keyHandler)
+					{
+						KeySym keySym = XLookupKeysym(&event.xkey, 0);
+						pApplication->window.handlers.keyHandler(keySym, FR_KEY_STATE_UP, pApplication->window.handlers.pKeyHandlerUserData);
+					}
+					break;
+
+				case MotionNotify:
+					if(pApplication->window.handlers.mouseMoveHandler)
+					{
+						static int previousX;
+						static int previousY;
+
+						static bool first = true;
+
+						if(first)
+						{
+							previousX = event.xmotion.x;
+							previousY = event.xmotion.y;
+
+							first = false;
+						}
+
+						pApplication->window.handlers.mouseMoveHandler(
+							event.xmotion.x - previousX,
+							event.xmotion.y - previousY,
+							pApplication->window.handlers.pMouseMoveHandlerUserData
+						);
+
+						previousX = event.xmotion.x;
+						previousY = event.xmotion.y;
+					}
+					break;
+
+				default:
+					break;
+			}
+		}
+
+		if(pApplication->window.resized)
+		{
+			XWindowAttributes attributes;
+			XGetWindowAttributes(pApplication->window.pDisplay, pApplication->window.window, &attributes);
+
+			if(attributes.width > 0 && attributes.height > 0)
+			{
+				if(frRecreateSwapchain(&pApplication->vulkanData) != FR_SUCCESS) return EXIT_FAILURE;
+				if(frDrawFrame(&pApplication->vulkanData) != FR_SUCCESS) return EXIT_FAILURE;
+			}
+		}
+		else
+		{
+			if(frDrawFrame(&pApplication->vulkanData) != FR_SUCCESS) return EXIT_FAILURE;
+		}
+	}
+
+	return EXIT_SUCCESS;
 #endif
 }

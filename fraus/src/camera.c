@@ -1,14 +1,16 @@
-#include "camera.h"
+#include "../include/fraus/camera.h"
 
 #include <math.h>
 
-#include "fraus.h"
+#include "../include/fraus/fraus.h"
 
 void frCreateCamera(FrCamera* pCamera, FrVulkanData* pVulkanData)
 {
 	pCamera->pVulkanData = pVulkanData;
 
-	pCamera->position = (FrVec3){0.f, 0.f, 0.f};
+	pCamera->position.x = 0.f;
+	pCamera->position.y = 0.f;
+	pCamera->position.z = 0.f;
 
 	pCamera->yaw = 0.f;
 	pCamera->pitch = 0.f;

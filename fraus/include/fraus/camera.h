@@ -1,7 +1,7 @@
 #ifndef FRAUS_CAMERA_H
 #define FRAUS_CAMERA_H
 
-#include "math.h"
+#include "./math.h"
 
 typedef struct FrVulkanData FrVulkanData;
 

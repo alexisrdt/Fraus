@@ -1,4 +1,4 @@
-#include "window.h"
+#include "../include/fraus/window.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -265,6 +265,10 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 
 #endif
 
+#ifndef _WIN32
+static Display* pDisplay = NULL;
+#endif
+
 /*
  * Create a window
  * - pTitle: the title of the window
@@ -332,14 +336,40 @@ FrResult frCreateWindow(const char* pTitle, FrWindow* pWindow)
 	++windowCount;
 
 	// Setup window data
-	pWindow->resized = false;
-	pWindow->capture = false;
-	memset(&pWindow->handlers, 0, sizeof(FrEventHandlers));
 	SetProp(pWindow->handle, TEXT("FrWindow"), (HANDLE)pWindow);
 
 	// Show window
 	ShowWindow(pWindow->handle, SW_SHOW);
+#else
+	// Open display
+	if(!pDisplay)
+	{
+		pDisplay = XOpenDisplay(NULL);
+		if(!pDisplay) return FR_ERROR_UNKNOWN;
+	}
+	pWindow->pDisplay = pDisplay;
+
+	// Create window
+	int screen = DefaultScreen(pWindow->pDisplay);
+	pWindow->window = XCreateSimpleWindow(
+		pWindow->pDisplay,
+		RootWindow(pWindow->pDisplay, screen),
+		0, 0,
+		640, 360,
+		0,
+		BlackPixel(pWindow->pDisplay, screen),
+		WhitePixel(pWindow->pDisplay, screen)
+	);
+	XStoreName(pWindow->pDisplay, pWindow->window, pTitle);
+	XSelectInput(pWindow->pDisplay, pWindow->window, KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | StructureNotifyMask);
+
+	// Show window
+	XMapWindow(pWindow->pDisplay, pWindow->window);
 #endif
+
+	pWindow->resized = false;
+	pWindow->capture = false;
+	memset(&pWindow->handlers, 0, sizeof(FrEventHandlers));
 
 	return FR_SUCCESS;
 }
@@ -352,6 +382,9 @@ void frDestroyWindow(FrWindow* pWindow)
 {
 #ifdef _WIN32
 	DestroyWindow(pWindow->handle);
+#else
+	XDestroyWindow(pWindow->pDisplay, pWindow->window);
+	XCloseDisplay(pWindow->pDisplay);
 #endif
 }
 
@@ -362,8 +395,9 @@ void frDestroyWindow(FrWindow* pWindow)
  */
 void frCaptureMouse(FrWindow* pWindow, bool capture)
 {
-	pWindow->capture = capture;
+pWindow->capture = capture;
 
+#ifdef _WIN32
 	if(capture)
 	{
 		RECT windowRect;
@@ -376,6 +410,15 @@ void frCaptureMouse(FrWindow* pWindow, bool capture)
 	}
 
 	ShowCursor(!capture);
+#else
+	if(capture)
+	{
+		XWindowAttributes attributes;
+		XGetWindowAttributes(pWindow->pDisplay, pWindow->window, &attributes);
+
+		XWarpPointer(pWindow->pDisplay, None, pWindow->window, 0, 0, 0, 0, attributes.width / 2, attributes.height / 2);
+	}
+#endif
 }
 
 /*
@@ -386,6 +429,11 @@ FrKeyState frGetKeyState(FrKey key)
 {
 #ifdef _WIN32
 	return GetKeyState(frFrKeyToWin32VirtualKey(key)) >= 0 ? FR_KEY_STATE_UP : FR_KEY_STATE_DOWN;
+#else
+	char keyboardState[32];
+	XQueryKeymap(pDisplay, keyboardState);
+
+	return keyboardState[key >> 3] & (1 << (key & 7));
 #endif
 }
 

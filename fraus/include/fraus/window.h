@@ -10,6 +10,10 @@
 
 #include <windows.h>
 
+#else
+
+#include <X11/Xlib.h>
+
 #endif
 
 // Keyboard key enum
@@ -90,6 +94,9 @@ typedef struct FrWindow
 {
 #ifdef _WIN32
 	HWND handle;
+#else
+	Display* pDisplay;
+	Window window;
 #endif
 	FrEventHandlers handlers;
 	bool resized;

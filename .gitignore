@@ -18,6 +18,9 @@
 !/demo
 !/demo/**
 
+# Except CMake
+!/CMakeLists.txt
+
 # Except Pages
 !/pages
 !/pages/**

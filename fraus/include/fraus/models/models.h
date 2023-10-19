@@ -5,7 +5,7 @@
 
 #include "../math.h"
 #include "../utils.h"
-#include "map.h"
+#include "./map.h"
 
 typedef struct FrModel
 {

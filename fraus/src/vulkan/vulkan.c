@@ -1,4 +1,4 @@
-#include "vulkan.h"
+#include "../../include/fraus/vulkan/vulkan.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -6,11 +6,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "../camera.h"
-#include "../fraus.h"
-#include "functions.h"
-#include "utils.h"
-#include "../images/images.h"
+#include "../../include/fraus/fraus.h"
 
 FR_DEFINE_VECTOR(FrPipeline, Pipeline)
 FR_DEFINE_VECTOR(FrUniformBuffer, UniformBuffer)
@@ -48,10 +44,10 @@ FrResult frDestroyVulkanData(FrVulkanData* pVulkanData)
 {
 	free(pVulkanData->pThreads);
 	free(pVulkanData->pThreadsData);
-	if(frDestroyConditionVariable(&pVulkanData->frameEndConditionVariable) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
-	if(frDestroyMutex(&pVulkanData->frameEndMutex) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
-	if(frDestroyConditionVariable(&pVulkanData->frameBeginConditionVariable) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
-	if(frDestroyMutex(&pVulkanData->frameBeginMutex) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	frDestroyConditionVariable(&pVulkanData->frameEndConditionVariable);
+	frDestroyMutex(&pVulkanData->frameEndMutex);
+	frDestroyConditionVariable(&pVulkanData->frameBeginConditionVariable);
+	frDestroyMutex(&pVulkanData->frameBeginMutex) ;
 
 	for(uint32_t i = 0; i < pVulkanData->threadCount * FR_FRAMES_IN_FLIGHT; ++i)
 	{
@@ -129,6 +125,7 @@ FrResult frDestroyVulkanData(FrVulkanData* pVulkanData)
 	return FR_SUCCESS;
 }
 
+#ifndef NDEBUG
 /*
  * Check that required layers are available
  * - pAvailableLayers: available layers
@@ -151,6 +148,7 @@ static bool frLayersAvailable(VkLayerProperties* pAvailableLayers, uint32_t avai
 
 	return true;
 }
+#endif
 
 /*
  * Check that required extensions are available
@@ -230,6 +228,28 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL frMessengerCallback(VkDebugUtilsMessageSev
 			SetConsoleTextAttribute(console, FOREGROUND_RED | FOREGROUND_INTENSITY);
 			break;
 	}
+#else
+	switch(messageSeverity)
+	{
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+			printf("\x1b[34m");
+			break;
+
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+			printf("\x1b[32m");
+			break;
+
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+			printf("\x1b[33m");
+			break;
+
+		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+			printf("\x1b[31m");
+			break;
+
+		default:
+			break;
+	}
 #endif
 
 	// vkCreateInstance / vkDestroyInstance messenger or global messenger
@@ -259,6 +279,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL frMessengerCallback(VkDebugUtilsMessageSev
 		case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
 			printf("E");
 			break;
+
+		default:
+			printf("?");
+			break;
 	}
 
 	// Object names
@@ -270,6 +294,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL frMessengerCallback(VkDebugUtilsMessageSev
 #ifdef _WIN32
 	// Reset console color
 	SetConsoleTextAttribute(console, consoleInfo.wAttributes);
+#else
+	printf("\x1b[0m");
 #endif
 
 	return VK_FALSE;
@@ -313,6 +339,8 @@ FrResult frCreateInstance(FrVulkanData* pVulkanData, const char* pName, uint32_t
 		VK_KHR_SURFACE_EXTENSION_NAME,
 #ifdef _WIN32
 		VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#else
+		VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
 #endif
 		// Optional
 #ifndef NDEBUG
@@ -342,7 +370,6 @@ FrResult frCreateInstance(FrVulkanData* pVulkanData, const char* pName, uint32_t
 #ifndef NDEBUG
 	if(!pVulkanData->debugExtensionAvailable && validationLayerAvailable)
 	{
-		availableExtensionCount;
 		if(vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &availableExtensionCount, NULL) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		pAvailableExtensions = malloc(availableExtensionCount * sizeof(VkExtensionProperties));
 		if(!pAvailableExtensions) return FR_ERROR_OUT_OF_MEMORY;
@@ -537,10 +564,10 @@ FrResult frCreateSurface(FrVulkanData* pVulkanData)
 	};
 	if(pVulkanData->functions.vkCreateWin32SurfaceKHR(pVulkanData->instance, &createInfo, NULL, &pVulkanData->surface) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 #else
-	VkXlibCreateInfoKHR createInfo = {
+	VkXlibSurfaceCreateInfoKHR createInfo = {
 		.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
-		.dpy = pVulkanData->window.display,
-		.window = pVulkanData->window.handle
+		.dpy = pVulkanData->pApplication->window.pDisplay,
+		.window = pVulkanData->pApplication->window.window
 	};
 	if(pVulkanData->functions.vkCreateXlibSurfaceKHR(pVulkanData->instance, &createInfo, NULL, &pVulkanData->surface) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 #endif
@@ -656,26 +683,28 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 			.objectHandle = (uint64_t)pVulkanData->instance,
 			.pObjectName = "Instance"
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
+		// The two next crash for some reason
 		nameInfo.objectType = VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT;
 		nameInfo.objectHandle = (uint64_t)pVulkanData->messenger;
 		nameInfo.pObjectName = "Messenger";
+		// if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 		nameInfo.objectType = VK_OBJECT_TYPE_SURFACE_KHR;
 		nameInfo.objectHandle = (uint64_t)pVulkanData->surface;
 		nameInfo.pObjectName = "Surface";
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		// if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 		nameInfo.objectType = VK_OBJECT_TYPE_PHYSICAL_DEVICE;
 		nameInfo.objectHandle = (uint64_t)pVulkanData->physicalDevice;
 		nameInfo.pObjectName = "Physical device";
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 		nameInfo.objectType = VK_OBJECT_TYPE_DEVICE;
 		nameInfo.objectHandle = (uint64_t)pVulkanData->device;
 		nameInfo.pObjectName = "Device";
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -764,7 +793,7 @@ FrResult frCreateDevice(FrVulkanData* pVulkanData)
 			.objectHandle = (uint64_t)pVulkanData->queue,
 			.pObjectName = "Queue"
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -881,7 +910,7 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 			.objectHandle = (uint64_t)pVulkanData->swapchain,
 			.pObjectName = "Swapchain"
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -909,7 +938,7 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 			if(snprintf(name, sizeof(name), "Swapchain image %u", imageIndex) < 0) return FR_ERROR_UNKNOWN;
 			nameInfo.objectHandle = (uint64_t)pVulkanData->pImages[imageIndex];
 			nameInfo.pObjectName = name;
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		}
 	}
 #endif
@@ -948,7 +977,7 @@ FrResult frCreateSwapchain(FrVulkanData* pVulkanData)
 				.objectHandle = (uint64_t)pVulkanData->pImageViews[imageIndex],
 				.pObjectName = name
 			};
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		}
 #endif
 	}
@@ -1042,7 +1071,7 @@ FrResult frCreateRenderPass(FrVulkanData* pVulkanData)
 			.objectHandle = (uint64_t)pVulkanData->renderPass,
 			.pObjectName = "Render pass"
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -1098,7 +1127,7 @@ FrResult frCreateFramebuffers(FrVulkanData* pVulkanData)
 				.objectHandle = (uint64_t)pVulkanData->pFramebuffers[imageIndex],
 				.pObjectName = name
 			};
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		}
 #endif
 	}
@@ -1168,7 +1197,7 @@ FrResult frCreateShaderModule(FrVulkanData* pVulkanData, const char* pPath, VkSh
 			.objectHandle = (uint64_t)*pShaderModule,
 			.pObjectName = pPath[strlen(pPath) - 1] == 't' ? "Vertex shader module" : "Fragment shader module" // .vert / .frag
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -1345,7 +1374,7 @@ FrResult frCreateGraphicsPipeline(
 			.objectHandle = (uint64_t)pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].descriptorSetLayout,
 			.pObjectName = name
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -1384,7 +1413,7 @@ FrResult frCreateGraphicsPipeline(
 			.objectHandle = (uint64_t)pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].pipelineLayout,
 			.pObjectName = name
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -1430,7 +1459,7 @@ FrResult frCreateGraphicsPipeline(
 			.objectHandle = (uint64_t)pVulkanData->graphicsPipelines.pData[pVulkanData->graphicsPipelines.size - 1].pipeline,
 			.pObjectName = name
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -1455,7 +1484,7 @@ FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData, VkDeviceSize size)
 			&pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].bufferMemories[frameIndex]
 		) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
-		if(pVulkanData->functions.vkMapMemory(pVulkanData->device, pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].bufferMemories[frameIndex], 0, size, 0, &pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].pBufferDatas[frameIndex]) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkMapMemory(pVulkanData->device, pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].bufferMemories[frameIndex], 0, size, 0, &pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].pBufferDatas[frameIndex]) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 #ifndef NDEBUG
 		if(pVulkanData->debugExtensionAvailable)
@@ -1468,12 +1497,12 @@ FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData, VkDeviceSize size)
 				.objectHandle = (uint64_t)pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].buffers[frameIndex],
 				.pObjectName = name
 			};
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 			if(snprintf(name, sizeof(name), "Uniform buffer memory %zu %u", pVulkanData->uniformBuffers.size - 1, frameIndex) < 0) return FR_ERROR_UNKNOWN;
 			nameInfo.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
 			nameInfo.objectHandle = (uint64_t)pVulkanData->uniformBuffers.pData[pVulkanData->uniformBuffers.size - 1].bufferMemories[frameIndex];
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		}
 #endif
 	}
@@ -1516,7 +1545,7 @@ FrResult frCreateSampler(FrVulkanData* pVulkanData)
 			.objectHandle = (uint64_t)pVulkanData->textureSampler,
 			.pObjectName = "Texture sampler"
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -1542,17 +1571,17 @@ FrResult frCreateColorImage(FrVulkanData* pVulkanData)
 			.objectHandle = (uint64_t)pVulkanData->colorImage,
 			.pObjectName = "Color image"
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 		nameInfo.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
 		nameInfo.objectHandle = (uint64_t)pVulkanData->colorImageMemory;
 		nameInfo.pObjectName = "Color image memory";
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 		nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
 		nameInfo.objectHandle = (uint64_t)pVulkanData->colorImageView;
 		nameInfo.pObjectName = "Color image view";
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -1577,7 +1606,7 @@ FrResult frCreateDepthImage(FrVulkanData* pVulkanData)
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		&pVulkanData->depthImage,
 		&pVulkanData->depthImageMemory
-	) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	if(frCreateImageView(pVulkanData, pVulkanData->depthImage, VK_FORMAT_D24_UNORM_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT, 1, &pVulkanData->depthImageView) != FR_SUCCESS)
 	{
@@ -1595,17 +1624,17 @@ FrResult frCreateDepthImage(FrVulkanData* pVulkanData)
 			.objectHandle = (uint64_t)pVulkanData->depthImage,
 			.pObjectName = "Depth image"
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 		nameInfo.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
 		nameInfo.objectHandle = (uint64_t)pVulkanData->depthImageMemory;
 		nameInfo.pObjectName = "Depth image memory";
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 		nameInfo.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
 		nameInfo.objectHandle = (uint64_t)pVulkanData->depthImageView;
 		nameInfo.pObjectName = "Depth image view";
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -1779,7 +1808,7 @@ FrResult frCreateCommandPools(FrVulkanData* pVulkanData)
 				.objectHandle = (uint64_t)pVulkanData->pCommandPools[i],
 				.pObjectName = name
 			};
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		}
 #endif
 
@@ -1804,7 +1833,7 @@ FrResult frCreateCommandPools(FrVulkanData* pVulkanData)
 					.objectHandle = (uint64_t)pVulkanData->pPrimaryCommandBuffers[i / pVulkanData->threadCount],
 					.pObjectName = name
 				};
-				if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+				if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 			}
 #endif
 		}
@@ -1828,7 +1857,7 @@ FrResult frCreateCommandPools(FrVulkanData* pVulkanData)
 				.objectHandle = (uint64_t)pVulkanData->pSecondaryCommandBuffers[i],
 				.pObjectName = name
 			};
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		}
 #endif
 	}
@@ -1857,16 +1886,16 @@ FrResult frCreateCommandPools(FrVulkanData* pVulkanData)
 				.objectHandle = (uint64_t)pVulkanData->imageAvailableSemaphores[i],
 				.pObjectName = name
 			};
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 			if(snprintf(name, sizeof(name), "Render finished semaphore %u", i) < 0) return FR_ERROR_UNKNOWN;
 			nameInfo.objectHandle = (uint64_t)pVulkanData->renderFinishedSemaphores[i];
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 			if(snprintf(name, sizeof(name), "Frame in flight fence %u", i) < 0) return FR_ERROR_UNKNOWN;
 			nameInfo.objectType = VK_OBJECT_TYPE_FENCE;
 			nameInfo.objectHandle = (uint64_t)pVulkanData->frameInFlightFences[i];
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		}
 #endif
 	}
@@ -1880,7 +1909,13 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 
 	if(pVulkanData->functions.vkWaitForFences(pVulkanData->device, 1, &pVulkanData->frameInFlightFences[pVulkanData->frameInFlightIndex], VK_TRUE, UINT64_MAX) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
-	if(pVulkanData->functions.vkAcquireNextImageKHR(pVulkanData->device, pVulkanData->swapchain, UINT64_MAX, pVulkanData->imageAvailableSemaphores[pVulkanData->frameInFlightIndex], VK_NULL_HANDLE, &pVulkanData->imageIndex) != VK_SUCCESS)
+	VkResult result = pVulkanData->functions.vkAcquireNextImageKHR(pVulkanData->device, pVulkanData->swapchain, UINT64_MAX, pVulkanData->imageAvailableSemaphores[pVulkanData->frameInFlightIndex], VK_NULL_HANDLE, &pVulkanData->imageIndex);
+	if(result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		pVulkanData->pApplication->window.resized = true;
+		return FR_SUCCESS;
+	}
+	else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
 	{
 		return FR_ERROR_UNKNOWN;
 	}
@@ -1899,9 +1934,15 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 	};
 	if(pVulkanData->functions.vkBeginCommandBuffer(pVulkanData->pPrimaryCommandBuffers[pVulkanData->frameInFlightIndex], &beginInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
+	VkClearValue clearColor = {
+		.color.float32 = {0.f, 0.f, 0.f, 0.f}
+	};
+	VkClearValue clearDepthStencil = {
+		.depthStencil = {1.f, 0}
+	};
 	VkClearValue clearValues[] = {
-		{{{0.f, 0.f, 0.f, 0.f}}},
-		{{1.f, 0}}
+		clearColor,
+		clearDepthStencil
 	};
 	VkRenderPassBeginInfo renderPassBegin = {
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -1919,7 +1960,7 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 	pVulkanData->updateHandler(
 		pVulkanData,
 		lastTime.tv_sec == 0 && lastTime.tv_nsec == 0 ? 0 :
-			(float)(((uintmax_t)currentTime.tv_sec - (uintmax_t)lastTime.tv_sec) * UINTMAX_C(1'000'000'000) + (uintmax_t)currentTime.tv_nsec - (uintmax_t)lastTime.tv_nsec) / 1'000'000'000.f,
+			(float)(((uintmax_t)currentTime.tv_sec - (uintmax_t)lastTime.tv_sec) * UINTMAX_C(1000000000) + (uintmax_t)currentTime.tv_nsec - (uintmax_t)lastTime.tv_nsec) / 1000000000.f,
 		pVulkanData->pUpdateHandlerUserData
 	);
 	lastTime = currentTime;
@@ -1986,7 +2027,16 @@ FrResult frDrawFrame(FrVulkanData* pVulkanData)
 		.pImageIndices = &pVulkanData->imageIndex,
 		.pResults = &presentResult
 	};
-	if(pVulkanData->functions.vkQueuePresentKHR(pVulkanData->queue, &presentInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	result = pVulkanData->functions.vkQueuePresentKHR(pVulkanData->queue, &presentInfo);
+	if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+	{
+		pVulkanData->pApplication->window.resized = true;
+		return FR_SUCCESS;
+	}
+	else if(result != VK_SUCCESS)
+	{
+		return FR_ERROR_UNKNOWN;
+	}
 
 	pVulkanData->frameInFlightIndex = (pVulkanData->frameInFlightIndex + 1) % FR_FRAMES_IN_FLIGHT;
 

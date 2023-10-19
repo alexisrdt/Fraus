@@ -1,7 +1,7 @@
 #ifndef FRAUS_VECTOR_H
 #define FRAUS_VECTOR_H
 
-#include "utils.h"
+#include "./utils.h"
 
 #define FR_DECLARE_VECTOR(type, name) \
 typedef struct Fr##name##Vector \

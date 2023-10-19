@@ -14,7 +14,6 @@
  * - capture: when true, the mouse is captured
  */
 static bool sameForward = false;
-static bool maximized = false;
 static bool capture = true;
 
 // Color factor
@@ -40,11 +39,6 @@ void myKeyHandler(FrKey key, FrKeyState state, FrWindow* pWindow)
 			sameForward = !sameForward;
 			break;
 
-		case FR_KEY_F:
-			maximized = !maximized;
-			ShowWindow(pWindow->handle, maximized ? SW_MAXIMIZE : SW_NORMAL);
-			break;
-
 		case FR_KEY_M:
 			capture = !capture;
 			frCaptureMouse(pWindow, capture);
@@ -56,6 +50,9 @@ void myKeyHandler(FrKey key, FrKeyState state, FrWindow* pWindow)
 				capture = true;
 				frCaptureMouse(pWindow, capture);
 			}
+			break;
+
+		default:
 			break;
 	}
 }
@@ -240,9 +237,9 @@ int main(void)
 	if(frCreateApplication("My super Fraus application", 1, &application) != FR_SUCCESS) return EXIT_FAILURE;
 
 	// Add input handlers
-	frSetKeyHandler(&application.window, myKeyHandler, &application.window);
-	frSetMouseMoveHandler(&application.window, myMouseMoveHandler, &application.camera);
-	frSetUpdateHandler(&application.vulkanData, myUpdateHandler, &application.camera);
+	frSetKeyHandler(&application.window, (FrKeyHandler)myKeyHandler, &application.window);
+	frSetMouseMoveHandler(&application.window, (FrMouseMoveHandler)myMouseMoveHandler, &application.camera);
+	frSetUpdateHandler(&application.vulkanData, (FrUpdateHandler)myUpdateHandler, &application.camera);
 
 	// Capture mouse
 	frCaptureMouse(&application.window, capture);

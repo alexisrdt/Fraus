@@ -1,4 +1,4 @@
-#include "images.h"
+#include "../../include/fraus/images/images.h"
 
 #include <errno.h>
 #include <stdbool.h>
@@ -137,10 +137,8 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 	}
 
 	bool first = true;
-	bool palette = false;
 	bool dataChunksStarted = false;
 	bool dataChunksFinished = false;
-	uint8_t bitDepth;
 	uint8_t* pData = NULL;
 	uint8_t* pTypeAndData = NULL;
 	size_t dataSize = 0;
@@ -154,12 +152,16 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 		{
 			free(pTypeAndData);
 			free(pData);
+			if(getc(file) == EOF)
+			{
+				fclose(file);
+				return FR_ERROR_CORRUPTED_FILE;
+			}
 			fclose(file);
-			if(getc(file) == EOF) return FR_ERROR_CORRUPTED_FILE;
 			return FR_ERROR_UNKNOWN;
 		}
 		uint32_t length = FR_MSBF_TO_U32(pLengthBuffer);
-		if(length >= (1 << 0x1F))
+		if(length >= (1u << 0x1F))
 		{
 			free(pTypeAndData);
 			free(pData);
@@ -232,9 +234,6 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 
-			// Read bit depth
-			bitDepth = pTypeAndData[12];
-
 			// Read color type
 			switch(pTypeAndData[13])
 			{
@@ -247,7 +246,6 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 					break;
 
 				case 3:
-					palette = true;
 					pImage->type = FR_RGB;
 					break;
 

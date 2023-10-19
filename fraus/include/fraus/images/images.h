@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "inflate.h"
+#include "./inflate.h"
 #include "../utils.h"
 
 // Image type and number of channels

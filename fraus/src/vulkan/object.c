@@ -1,10 +1,12 @@
-#include "object.h"
+#include "../../include/fraus/vulkan/object.h"
 
-#include "../models/models.h"
-#include "functions.h"
-#include "utils.h"
+#include "../../include/fraus/models/models.h"
+#include "../../include/fraus/vulkan/functions.h"
+#include "../../include/fraus/vulkan/utils.h"
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 FR_DEFINE_VECTOR(FrVulkanObject, VulkanObject)
 
@@ -23,7 +25,7 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, uint3
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
 
-	if(frCreateBuffer(pVulkanData, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
+	if(frCreateBuffer(pVulkanData, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
 
 	void* pData;
 	pVulkanData->functions.vkMapMemory(pVulkanData->device, stagingBufferMemory, 0, size, 0, &pData);
@@ -36,7 +38,7 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, uint3
 		size,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &object.buffer,
-		&object.memory) != VK_SUCCESS
+		&object.memory) != FR_SUCCESS
 	) return FR_ERROR_UNKNOWN;
 
 #ifndef NDEBUG
@@ -50,12 +52,12 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, uint3
 			.objectHandle = (uint64_t)object.buffer,
 			.pObjectName = name
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 
 		if(snprintf(name, sizeof(name), "Vertex / index buffer memory %zu", pVulkanData->objects.size) < 0) return FR_ERROR_UNKNOWN;
 		nameInfo.objectType = VK_OBJECT_TYPE_DEVICE_MEMORY;
 		nameInfo.objectHandle = (uint64_t)object.memory;
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -128,7 +130,7 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, uint3
 			.objectHandle = (uint64_t)object.descriptorPool,
 			.pObjectName = name
 		};
-		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+		if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 	}
 #endif
 
@@ -167,7 +169,7 @@ FrResult frCreateObject(FrVulkanData* pVulkanData, const char* pModelPath, uint3
 			if(snprintf(name, sizeof(name), "Descriptor set %zu %u", pVulkanData->objects.size, descriptorSetIndex) < 0) return FR_ERROR_UNKNOWN;
 			nameInfo.objectHandle = (uint64_t)object.descriptorSets[descriptorSetIndex];
 
-			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+			if(pVulkanData->functions.vkSetDebugUtilsObjectNameEXT(pVulkanData->device, &nameInfo) != VK_SUCCESS) return FR_ERROR_UNKNOWN;
 		}
 	}
 #endif

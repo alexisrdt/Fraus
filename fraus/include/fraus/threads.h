@@ -10,7 +10,7 @@
 
 // Include FrResult
 
-#include "utils.h"
+#include "./utils.h"
 
 // Type definitions
 
@@ -30,11 +30,11 @@ typedef CONDITION_VARIABLE FrConditionVariable;
 
 #else
 
-#include <pthread.h>
+#include <threads.h>
 
-typedef pthread_t FrThread;
-typedef pthread_mutex_t FrMutex;
-typedef pthread_cond_t FrConditionVariable;
+typedef thrd_t FrThread;
+typedef mtx_t FrMutex;
+typedef cnd_t FrConditionVariable;
 
 #endif
 
@@ -52,7 +52,7 @@ FrResult frJoinThread(FrThread thread, int* pReturnValue);
 FrResult frInitializeMutex(FrMutex* pMutex);
 FrResult frLockMutex(FrMutex* pMutex);
 FrResult frUnlockMutex(FrMutex* pMutex);
-FrResult frDestroyMutex(FrMutex* pMutex);
+void frDestroyMutex(FrMutex* pMutex);
 
 /* Condition variable */
 
@@ -60,6 +60,6 @@ FrResult frInitializeConditionVariable(FrConditionVariable* pConditionVariable);
 FrResult frWaitConditionVariable(FrConditionVariable* pConditionVariable, FrMutex* pMutex);
 FrResult frSignalConditionVariable(FrConditionVariable* pConditionVariable);
 FrResult frBroadcastConditionVariable(FrConditionVariable* pConditionVariable);
-FrResult frDestroyConditionVariable(FrConditionVariable* pConditionVariable);
+void frDestroyConditionVariable(FrConditionVariable* pConditionVariable);
 
 #endif

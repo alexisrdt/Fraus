@@ -1,10 +1,10 @@
 #ifndef FRAUS_VULKAN_VULKAN_H
 #define FRAUS_VULKAN_VULKAN_H
 
-#include "functions.h"
-#include "include.h"
-#include "object.h"
-#include "utils.h"
+#include "./functions.h"
+#include "./include.h"
+#include "./object.h"
+#include "./utils.h"
 #include "../window.h"
 
 FrResult frCreateVulkanData(FrVulkanData* pVulkanData, const char* pName, uint32_t version);

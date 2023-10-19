@@ -1,6 +1,7 @@
 #ifndef FRAUS_INFLATE_TEMP_H
 #define FRAUS_INFLATE_TEMP_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "../utils.h"

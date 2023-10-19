@@ -1,7 +1,7 @@
 #ifndef FRAUS_VULKAN_UTILS_H
 #define FRAUS_VULKAN_UTILS_H
 
-#include "include.h"
+#include "./include.h"
 
 FrResult frFindMemoryTypeIndex(FrVulkanData* pVulkanData, uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* pIndex);
 

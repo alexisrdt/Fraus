@@ -1,4 +1,4 @@
-#include "inflate.h"
+#include "../../include/fraus/images/inflate.h"
 
 #include <stdbool.h>
 #include <stdio.h>
