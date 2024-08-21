@@ -7,8 +7,6 @@ typedef struct FrVulkanData FrVulkanData;
 
 typedef struct FrCamera
 {
-	FrVulkanData* pVulkanData;
-
 	FrVec3 position;
 
 	float yaw;
@@ -21,15 +19,19 @@ typedef struct FrCamera
 	float rotationSpeed;
 } FrCamera;
 
-/*
- *  Creates a default camera with close near plane and infinite far plane
- *  - pCamera: pointer to a camera
- */
-void frCreateCamera(FrCamera* pCamera, FrVulkanData* pVulkanData);
+extern FrCamera camera;
 
 /*
- * Get the camera view and projection matrix
+ *  Create a default camera with close near plane and infinite far plane.
  */
-void frGetCameraMatrix(FrCamera* pCamera, float matrix[16]);
+void frCreateCamera(void);
+
+/*
+ * Get the camera view and projection matrix.
+ *
+ * Parameters:
+ * - matrix: The matrix to store the result.
+ */
+void frGetCameraMatrix(float matrix[16]);
 
 #endif

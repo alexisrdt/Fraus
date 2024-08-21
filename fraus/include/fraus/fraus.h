@@ -1,48 +1,56 @@
 #ifndef FRAUS_FRAUS_H
 #define FRAUS_FRAUS_H
 
-#if __STDC_VERSION__ < 199901L
-#error C99 required
-#endif
-
 #include "./camera.h"
+#include "./fonts/fonts.h"
 #include "./images/images.h"
+#include "./input.h"
 #include "./math.h"
 #include "./models/models.h"
-#include "./threads.h"
 #include "./utils.h"
 #include "./vulkan/vulkan.h"
 #include "./window.h"
 
-typedef struct FrApplication
-{
-	FrWindow window;
-	FrCamera camera;
-	FrVulkanData vulkanData;
-} FrApplication;
+typedef void (*FrUpdateHandler)(float elapsed, void* pUserData);
 
 /*
- * Create a Fraus application
+ * Create a Fraus application.
+ *
+ * Parameters:
+ * - name: The name of the application.
+ * - version: The version of the application.
+ * 
  * Returns:
  * - FR_SUCCESS if everything went well
  * - FR_ERROR_FILE_NOT_FOUND if the Vulkan library could not be found
  * - FR_ERROR_UNKNOWN if some other error occured
  */
-FrResult frCreateApplication(const char* pName, uint32_t version, FrApplication* pApplication);
+FrResult frCreateApplication(const char* name, uint32_t version);
 
 /*
- * Destroy a Fraus application
+ * Destroy a Fraus application.
+ *
  * Returns:
  * - FR_SUCCESS if everything went well
  * - FR_ERROR_UNKNOWN if freeing the Vulkan library failed
  */
-FrResult frDestroyApplication(FrApplication* pApplication);
+FrResult frDestroyApplication(void);
 
 /*
- * Main loop of the application
- * - pApplication: pointer to an application
- * Returns the exit value of the application
+ * Set the update handler.
+ *
+ * Parameters:
+ * - handler: The handler.
+ * - pUserData: The user data.
  */
-int frMainLoop(FrApplication* pApplication);
+void frSetUpdateHandler(FrUpdateHandler handler, void* pUserData);
+
+/*
+ * Main loop of the application.
+ *
+ * Returns:
+ * - The exit value of the application.
+ */
+int frRunApplication(void);
 
 #endif

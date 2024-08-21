@@ -3,26 +3,14 @@
 
 #include <stdbool.h>
 
-// Load Vulkan dynamically
-#define VK_NO_PROTOTYPES
-
-// Vulkan platform
-#ifdef _WIN32
-#define VK_USE_PLATFORM_WIN32_KHR
-#else
-#define VK_USE_PLATFORM_XLIB_KHR
-#endif
-
 // Include Vulkan
 #include <vulkan/vulkan.h>
 
 #include "../math.h"
-#include "../threads.h"
 #include "../vector.h"
 #include "../window.h"
 
 typedef struct FrVulkanData FrVulkanData;
-typedef void(*FrUpdateHandler)(FrVulkanData* pVulkanData, float elapsed, void* pUserData);
 
 #define FR_FRAMES_IN_FLIGHT 2
 
@@ -31,7 +19,7 @@ typedef struct FrVulkanObject
 	VkDeviceMemory memory;
 	VkBuffer buffer;
 	uint32_t vertexCount;
-	FrVertex* pVertices;
+	FrVertex* vertices;
 	uint32_t indexCount;
 
 	float transformation[16];
@@ -44,120 +32,12 @@ typedef struct FrVulkanObject
 
 FR_DECLARE_VECTOR(FrVulkanObject, VulkanObject)
 
-#define FR_DECLARE_PFN(name) \
-PFN_##name name;
-
-typedef struct FrVulkanFunctions
-{
-	FR_DECLARE_PFN(vkDestroyInstance)
-#ifndef NDEBUG
-	FR_DECLARE_PFN(vkCreateDebugUtilsMessengerEXT)
-	FR_DECLARE_PFN(vkDestroyDebugUtilsMessengerEXT)
-	FR_DECLARE_PFN(vkSetDebugUtilsObjectNameEXT)
-#endif
-	FR_DECLARE_PFN(vkEnumeratePhysicalDevices)
-	FR_DECLARE_PFN(vkGetPhysicalDeviceProperties)
-	FR_DECLARE_PFN(vkGetPhysicalDeviceFeatures)
-	FR_DECLARE_PFN(vkGetPhysicalDeviceQueueFamilyProperties)
-	FR_DECLARE_PFN(vkGetPhysicalDeviceMemoryProperties)
-	FR_DECLARE_PFN(vkGetPhysicalDeviceFormatProperties)
-	FR_DECLARE_PFN(vkGetPhysicalDeviceSurfaceCapabilitiesKHR)
-	FR_DECLARE_PFN(vkGetPhysicalDeviceSurfaceFormatsKHR)
-	FR_DECLARE_PFN(vkGetPhysicalDeviceSurfacePresentModesKHR)
-	FR_DECLARE_PFN(vkGetPhysicalDeviceSurfaceSupportKHR)
-#ifdef _WIN32
-	FR_DECLARE_PFN(vkCreateWin32SurfaceKHR)
-#else
-	FR_DECLARE_PFN(vkCreateXlibSurfaceKHR)
-#endif
-	FR_DECLARE_PFN(vkDestroySurfaceKHR)
-	FR_DECLARE_PFN(vkGetDeviceProcAddr)
-	FR_DECLARE_PFN(vkEnumerateDeviceLayerProperties)
-	FR_DECLARE_PFN(vkEnumerateDeviceExtensionProperties)
-	FR_DECLARE_PFN(vkCreateDevice)
-
-	FR_DECLARE_PFN(vkDestroyDevice)
-	FR_DECLARE_PFN(vkGetDeviceQueue)
-	FR_DECLARE_PFN(vkCreateSwapchainKHR)
-	FR_DECLARE_PFN(vkDestroySwapchainKHR)
-	FR_DECLARE_PFN(vkGetSwapchainImagesKHR)
-	FR_DECLARE_PFN(vkCreateImage)
-	FR_DECLARE_PFN(vkDestroyImage)
-	FR_DECLARE_PFN(vkCreateImageView)
-	FR_DECLARE_PFN(vkDestroyImageView)
-	FR_DECLARE_PFN(vkCreateSampler)
-	FR_DECLARE_PFN(vkDestroySampler)
-	FR_DECLARE_PFN(vkCreateFramebuffer)
-	FR_DECLARE_PFN(vkDestroyFramebuffer)
-	FR_DECLARE_PFN(vkCreateRenderPass)
-	FR_DECLARE_PFN(vkDestroyRenderPass)
-	FR_DECLARE_PFN(vkCreateDescriptorSetLayout)
-	FR_DECLARE_PFN(vkDestroyDescriptorSetLayout)
-	FR_DECLARE_PFN(vkCreateShaderModule)
-	FR_DECLARE_PFN(vkDestroyShaderModule)
-	FR_DECLARE_PFN(vkCreatePipelineLayout)
-	FR_DECLARE_PFN(vkDestroyPipelineLayout)
-	FR_DECLARE_PFN(vkCreateGraphicsPipelines)
-	FR_DECLARE_PFN(vkDestroyPipeline)
-	FR_DECLARE_PFN(vkCreateBuffer)
-	FR_DECLARE_PFN(vkDestroyBuffer)
-	FR_DECLARE_PFN(vkAllocateMemory)
-	FR_DECLARE_PFN(vkGetBufferMemoryRequirements)
-	FR_DECLARE_PFN(vkGetImageMemoryRequirements)
-	FR_DECLARE_PFN(vkFreeMemory)
-	FR_DECLARE_PFN(vkBindBufferMemory)
-	FR_DECLARE_PFN(vkBindImageMemory)
-	FR_DECLARE_PFN(vkMapMemory)
-	FR_DECLARE_PFN(vkUnmapMemory)
-	FR_DECLARE_PFN(vkCreateSemaphore)
-	FR_DECLARE_PFN(vkDestroySemaphore)
-	FR_DECLARE_PFN(vkCreateFence)
-	FR_DECLARE_PFN(vkDestroyFence)
-	FR_DECLARE_PFN(vkWaitForFences)
-	FR_DECLARE_PFN(vkResetFences)
-	FR_DECLARE_PFN(vkCreateCommandPool)
-	FR_DECLARE_PFN(vkDestroyCommandPool)
-	FR_DECLARE_PFN(vkCreateDescriptorPool)
-	FR_DECLARE_PFN(vkDestroyDescriptorPool)
-	FR_DECLARE_PFN(vkAllocateDescriptorSets)
-	FR_DECLARE_PFN(vkUpdateDescriptorSets)
-	FR_DECLARE_PFN(vkAllocateCommandBuffers)
-	FR_DECLARE_PFN(vkFreeCommandBuffers)
-	FR_DECLARE_PFN(vkResetCommandBuffer)
-	FR_DECLARE_PFN(vkResetCommandPool)
-	FR_DECLARE_PFN(vkAcquireNextImageKHR)
-	FR_DECLARE_PFN(vkQueuePresentKHR)
-	FR_DECLARE_PFN(vkQueueSubmit)
-	FR_DECLARE_PFN(vkQueueWaitIdle)
-	FR_DECLARE_PFN(vkBeginCommandBuffer)
-	FR_DECLARE_PFN(vkEndCommandBuffer)
-	FR_DECLARE_PFN(vkCmdExecuteCommands)
-	FR_DECLARE_PFN(vkCmdBeginRenderPass)
-	FR_DECLARE_PFN(vkCmdNextSubpass)
-	FR_DECLARE_PFN(vkCmdEndRenderPass)
-	FR_DECLARE_PFN(vkCmdBindPipeline)
-	FR_DECLARE_PFN(vkCmdPipelineBarrier)
-	FR_DECLARE_PFN(vkCmdCopyBuffer)
-	FR_DECLARE_PFN(vkCmdCopyBufferToImage)
-	FR_DECLARE_PFN(vkCmdBlitImage)
-	FR_DECLARE_PFN(vkCmdBindVertexBuffers)
-	FR_DECLARE_PFN(vkCmdBindIndexBuffer)
-	FR_DECLARE_PFN(vkCmdBindDescriptorSets)
-	FR_DECLARE_PFN(vkCmdPushConstants)
-	FR_DECLARE_PFN(vkCmdSetViewport)
-	FR_DECLARE_PFN(vkCmdSetScissor)
-	FR_DECLARE_PFN(vkCmdDraw)
-	FR_DECLARE_PFN(vkCmdDrawIndexed)
-	FR_DECLARE_PFN(vkDeviceWaitIdle)
-} FrVulkanFunctions;
-
 typedef struct FrApplication FrApplication;
-
-typedef struct FrThreadData FrThreadData;
 
 typedef struct FrPipeline
 {
-	VkDescriptorType* pDescriptorTypes;
+	bool hasPushConstants;
+	VkDescriptorType* descriptorTypes;
 	uint32_t descriptorTypeCount;
 	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
@@ -171,10 +51,19 @@ typedef struct FrUniformBuffer
 	VkBuffer buffers[FR_FRAMES_IN_FLIGHT];
 	VkDeviceSize buffersSize;
 	VkDeviceMemory bufferMemories[FR_FRAMES_IN_FLIGHT];
-	void* pBufferDatas[FR_FRAMES_IN_FLIGHT];
+	void* bufferDatas[FR_FRAMES_IN_FLIGHT];
 } FrUniformBuffer;
 
 FR_DECLARE_VECTOR(FrUniformBuffer, UniformBuffer)
+
+typedef struct FrStorageBuffer
+{
+	VkBuffer buffer;
+	VkDeviceMemory bufferMemory;
+	VkDeviceSize bufferSize;
+} FrStorageBuffer;
+
+FR_DECLARE_VECTOR(FrStorageBuffer, StorageBuffer)
 
 typedef struct FrTexture
 {
@@ -185,77 +74,55 @@ typedef struct FrTexture
 
 FR_DECLARE_VECTOR(FrTexture, Texture)
 
-typedef struct FrVulkanData
-{
-	FrApplication* pApplication;
-
-	FrVulkanFunctions functions;
-
-	VkInstance instance;
+extern VkInstance instance;
 #ifndef NDEBUG
-	bool debugExtensionAvailable;
-	VkDebugUtilsMessengerEXT messenger;
+extern bool debugExtensionAvailable;
+extern VkDebugUtilsMessengerEXT messenger;
 #endif
-	VkSurfaceKHR surface;
-	VkPhysicalDevice physicalDevice;
-	uint32_t queueFamily;
-	VkDevice device;
-	VkQueue queue;
-	VkExtent2D extent;
-	VkFormat format;
-	VkSwapchainKHR swapchain;
-	VkImage* pImages;
-	VkImageView* pImageViews;
-	VkFramebuffer* pFramebuffers;
-	uint32_t imageCount;
-	VkRenderPass renderPass;
-	FrPipelineVector graphicsPipelines;
-	FrUniformBufferVector uniformBuffers;
-	FrTextureVector textures;
-	uint32_t textureMipLevels;
-	VkSampleCountFlagBits msaaSamples;
-	FrVulkanObjectVector objects;
-	VkImage colorImage;
-	VkDeviceMemory colorImageMemory;
-	VkImageView colorImageView;
-	VkImage depthImage;
-	VkDeviceMemory depthImageMemory;
-	VkImageView depthImageView;
-	VkSampler textureSampler;
+extern VkSurfaceKHR surface;
+extern VkPhysicalDevice physicalDevice;
+extern VkDevice device;
+extern uint32_t queueFamily;
+extern VkQueue queue;
 
-	uint32_t frameInFlightIndex;
-	uint32_t imageIndex;
+extern VkSwapchainKHR swapchain;
+extern VkExtent2D swapchainExtent;
+extern VkFormat swapchainFormat;
+extern uint32_t swapchainImageCount;
+extern VkImage* swapchainImages;
+extern VkImageView* swapchainImageViews;
 
-	bool threadShouldExit;
-	uint32_t threadCount;
-	FrThread* pThreads;
-	FrThreadData* pThreadsData;
+extern VkRenderPass renderPass;
+extern VkFramebuffer* framebuffers;
 
-	uint32_t frameFinishedThreadCount;
+extern FrPipelineVector graphicsPipelines;
+extern FrUniformBufferVector uniformBuffers;
+extern FrStorageBufferVector storageBuffers;
+extern uint32_t textureMipLevels;
+extern FrTextureVector textures;
+extern VkSampleCountFlagBits msaaSamples;
+extern FrVulkanObjectVector frObjects;
 
-	FrMutex frameBeginMutex;
-	FrConditionVariable frameBeginConditionVariable;
+extern VkSemaphore imageAvailableSemaphores[FR_FRAMES_IN_FLIGHT];
+extern VkSemaphore renderFinishedSemaphores[FR_FRAMES_IN_FLIGHT];
+extern VkFence frameInFlightFences[FR_FRAMES_IN_FLIGHT];
 
-	FrMutex frameEndMutex;
-	FrConditionVariable frameEndConditionVariable;
+extern VkCommandPool commandPools[FR_FRAMES_IN_FLIGHT];
+extern VkCommandBuffer commandBuffers[FR_FRAMES_IN_FLIGHT];
 
-	VkCommandPool* pCommandPools;
-	VkCommandBuffer pPrimaryCommandBuffers[FR_FRAMES_IN_FLIGHT];
-	VkCommandBuffer* pSecondaryCommandBuffers;
+extern VkImage colorImage;
+extern VkDeviceMemory colorImageMemory;
+extern VkImageView colorImageView;
+extern VkImage depthImage;
+extern VkDeviceMemory depthImageMemory;
+extern VkImageView depthImageView;
+extern VkSampler textureSampler;
 
-	VkSemaphore imageAvailableSemaphores[FR_FRAMES_IN_FLIGHT];
-	VkSemaphore renderFinishedSemaphores[FR_FRAMES_IN_FLIGHT];
-	VkFence frameInFlightFences[FR_FRAMES_IN_FLIGHT];
+extern uint32_t frameInFlightIndex;
+extern uint32_t swapchainImageIndex;
 
-	FrUpdateHandler updateHandler;
-	void* pUpdateHandlerUserData;
-} FrVulkanData;
-
-typedef struct FrThreadData
-{
-	FrVulkanData* pVulkanData;
-	uint32_t threadIndex;
-	bool canRun;
-} FrThreadData;
+extern uint32_t instanceCount;
+extern VkDeviceMemory instanceBufferMemory;
+extern VkBuffer instanceBuffer;
 
 #endif

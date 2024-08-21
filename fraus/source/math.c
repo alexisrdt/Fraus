@@ -115,6 +115,27 @@ void frZRotation(float matrix[16], float angle)
 	matrix[15] = 1.f;
 }
 
+void frScaling(float matrix[16], float x, float y, float z)
+{
+	matrix[ 0] =   x;
+	matrix[ 1] = 0.f;
+	matrix[ 2] = 0.f;
+	matrix[ 3] = 0.f;
+	matrix[ 4] = 0.f;
+	matrix[ 5] =   y;
+	matrix[ 6] = 0.f;
+	matrix[ 7] = 0.f;
+	matrix[ 8] = 0.f;
+	matrix[ 9] = 0.f;
+	matrix[10] =   z;
+	matrix[11] = 0.f;
+	matrix[12] = 0.f;
+	matrix[13] = 0.f;
+	matrix[14] = 0.f;
+	matrix[15] = 1.f;
+
+}
+
 void frLookDir(float matrix[16], const FrVec3* pEye, const FrVec3* pForward, const FrVec3* pRight, const FrVec3* pUp)
 {
 	matrix[ 0] = pRight->x;
@@ -137,7 +158,7 @@ void frLookDir(float matrix[16], const FrVec3* pEye, const FrVec3* pForward, con
 
 void frLookAt(float matrix[16], const FrVec3* pEye, const FrVec3* pObjective)
 {
-	static const FrVec3 worldUp = {
+	const FrVec3 worldUp = {
 		.x = 0.f,
 		.y = 0.f,
 		.z = 1.f

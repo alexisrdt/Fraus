@@ -1,39 +1,33 @@
 #ifndef FRAUS_VULKAN_VULKAN_H
 #define FRAUS_VULKAN_VULKAN_H
 
-#include "./functions.h"
+#include "../../../source/vulkan/functions.h"
 #include "./include.h"
 #include "./object.h"
-#include "./utils.h"
+#include "./vulkan_utils.h"
 #include "../window.h"
 
-FrResult frCreateVulkanData(FrVulkanData* pVulkanData, const char* pName, uint32_t version);
-FrResult frDestroyVulkanData(FrVulkanData* pVulkanData);
+FrResult frCreateVulkanData(const char* name, uint32_t version);
+FrResult frDestroyVulkanData(void);
 
-FrResult frCreateInstance(FrVulkanData* pVulkanData, const char* pName, uint32_t version);
-FrResult frChoosePhysicalDevice(FrVulkanData* pVulkanData);
-FrResult frCreateSurface(FrVulkanData* pVulkanData);
-FrResult frCreateDevice(FrVulkanData* pVulkanData);
-FrResult frCreateSwapchain(FrVulkanData* pVulkanData);
-FrResult frCreateRenderPass(FrVulkanData* pVulkanData);
-FrResult frCreateFramebuffers(FrVulkanData* pVulkanData);
-FrResult frCreateShaderModule(FrVulkanData* pVulkanData, const char* pPath, VkShaderModule* pShaderModule);
-FrResult frCreateGraphicsPipeline(
-	FrVulkanData* pVulkanData,
-	const char* pVertexShaderPath,
-	const char* pFragmentShaderPath,
-	VkDescriptorSetLayoutBinding* pDescriptorSetLayoutBindings,
-	uint32_t descriptorSetLayoutBindingCount
-);
-FrResult frCreateUniformBuffer(FrVulkanData* pVulkanData, VkDeviceSize size);
-FrResult frCreateSampler(FrVulkanData* pVulkanData);
-FrResult frCreateColorImage(FrVulkanData* pVulkanData);
-FrResult frCreateDepthImage(FrVulkanData* pVulkanData);
-FrResult frCreateCommandPools(FrVulkanData* pVulkanData);
-FrResult frDrawFrame(FrVulkanData* pVulkanData);
+typedef struct FrPipelineCreateInfo
+{
+	const char* vertexShaderPath;
+	const char* fragmentShaderPath;
 
-FrResult frRecreateSwapchain(FrVulkanData* pVulkanData);
+	uint32_t vertexInputRateCount;
+	const VkVertexInputRate* vertexInputRates;
+	const uint32_t* vertexInputStrides;
 
-void frSetUpdateHandler(FrVulkanData* pVulkanData, FrUpdateHandler handler, void* pUserData);
+	bool depthTestDisable: 1;
+	bool alphaBlendEnable: 1;
+} FrPipelineCreateInfo;
+FrResult frCreateGraphicsPipeline(const FrPipelineCreateInfo* pCreateInfo);
+FrResult frCreateUniformBuffer(VkDeviceSize size);
+FrResult frCreateStorageBuffer(VkDeviceSize size);
+FrResult frSetStorageBufferData(uint32_t storageBufferIndex, const void* data, VkDeviceSize size);
+FrResult frDrawFrame(void);
+
+FrResult frRecreateSwapchain(void);
 
 #endif

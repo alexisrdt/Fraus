@@ -1,14 +1,14 @@
 # Ignore all
 *
 
-# Except GitHub
-!/.github
-!/.github/**
-
 # Except Git
 !.gitignore
 !LICENSE.md
 !README.md
+
+# Except GitHub
+!/.github
+!/.github/**
 
 # Except Fraus
 !/fraus
@@ -17,6 +17,10 @@
 # Except demo
 !/demo
 !/demo/**
+
+# Except tests
+!/tests
+!/tests/**
 
 # Except CMake
 !/CMakeLists.txt

@@ -7,18 +7,59 @@
 #include "utils.h"
 
 #ifdef _WIN32
-
-#include <windows.h>
-
+	#include <windows.h>
 #else
-
-#include <X11/Xlib.h>
-
+	#include <X11/Xlib.h>
 #endif
 
 // Keyboard key enum
 typedef enum FrKey
 {
+	#ifdef _WIN32
+	FR_KEY_LEFT_MOUSE = VK_LBUTTON,
+	FR_KEY_RIGHT_MOUSE = VK_RBUTTON,
+
+	FR_KEY_A = 'A',
+	FR_KEY_B = 'B',
+	FR_KEY_C = 'C',
+	FR_KEY_D = 'D',
+	FR_KEY_E = 'E',
+	FR_KEY_F = 'F',
+	FR_KEY_G = 'G',
+	FR_KEY_H = 'H',
+	FR_KEY_I = 'I',
+	FR_KEY_J = 'J',
+	FR_KEY_K = 'K',
+	FR_KEY_L = 'L',
+	FR_KEY_M = 'M',
+	FR_KEY_N = 'N',
+	FR_KEY_O = 'O',
+	FR_KEY_P = 'P',
+	FR_KEY_Q = 'Q',
+	FR_KEY_R = 'R',
+	FR_KEY_S = 'S',
+	FR_KEY_T = 'T',
+	FR_KEY_U = 'U',
+	FR_KEY_V = 'V',
+	FR_KEY_W = 'W',
+	FR_KEY_X = 'X',
+	FR_KEY_Y = 'Y',
+	FR_KEY_Z = 'Z',
+
+	FR_KEY_LEFT = VK_LEFT,
+	FR_KEY_RIGHT = VK_RIGHT,
+	FR_KEY_UP = VK_UP,
+	FR_KEY_DOWN = VK_DOWN,
+
+	FR_KEY_SPACE = VK_SPACE,
+
+	FR_KEY_LEFT_CONTROL = VK_LCONTROL,
+	FR_KEY_RIGHT_CONTROL = VK_RCONTROL,
+	FR_KEY_LEFT_SHIFT = VK_LSHIFT,
+	FR_KEY_RIGHT_SHIFT = VK_RSHIFT,
+
+	FR_KEY_ESCAPE = VK_ESCAPE
+	#else
 	FR_KEY_LEFT_MOUSE,
 	FR_KEY_RIGHT_MOUSE,
 
@@ -61,9 +102,8 @@ typedef enum FrKey
 	FR_KEY_LEFT_SHIFT,
 	FR_KEY_RIGHT_SHIFT,
 
-	FR_KEY_ESCAPE,
-
-	FR_KEY_UNKNOWN
+	FR_KEY_ESCAPE
+	#endif
 } FrKey;
 
 typedef enum FrKeyState
@@ -73,9 +113,9 @@ typedef enum FrKeyState
 } FrKeyState;
 
 // Handlers
-typedef void(*FrMouseMoveHandler)(int32_t dx, int32_t dy, void* pUserData);
-typedef void(*FrKeyHandler)(FrKey key, FrKeyState state, void* pUserData);
-typedef void(*FrResizeHandler)(uint16_t newWidth, uint16_t newHeight, void* pUserData);
+typedef void (*FrMouseMoveHandler)(int32_t dx, int32_t dy, void* pUserData);
+typedef void (*FrKeyHandler)(FrKey key, FrKeyState state, void* pUserData);
+typedef void (*FrResizeHandler)(uint16_t newWidth, uint16_t newHeight, void* pUserData);
 
 typedef struct FrEventHandlers
 {
@@ -89,40 +129,48 @@ typedef struct FrEventHandlers
 	void* pResizeHandlerUserData;
 } FrEventHandlers;
 
-// Window type
-typedef struct FrWindow
-{
 #ifdef _WIN32
-	HWND handle;
+extern HWND windowHandle;
+extern HINSTANCE windowInstance;
 #else
-	Display* pDisplay;
-	Window window;
+extern Display* display;
+extern Window window;
 #endif
-	FrEventHandlers handlers;
-	bool resized;
-	bool capture;
-
-} FrWindow;
+extern bool windowResized;
+extern bool windowCaptured;
+extern FrEventHandlers eventHandlers;
 
 /*
- * Create a window
- * - pTitle: the title of the window
- * - pWindow: pointer to a handle for the window
+ * Create the window.
+ *
+ * Parameters:
+ * - title: the title of the window.
+ * 
+ * Returns:
+ * - FR_SUCCESS: the window was created successfully
+ * - FR_ERROR: an error occurred
  */
-FrResult frCreateWindow(const char* pTitle, FrWindow* pWindow);
+FrResult frCreateWindow(const char* title);
 
 /*
- * Destroy a window
- * - pWindow: pointer to the window
+ * Destroy the window.
  */
-void frDestroyWindow(FrWindow* pWindow);
+void frDestroyWindow(void);
+
+void frCloseWindow(void);
 
 /*
- * Capture the mouse
- * - pWindow: pointer to the window
- * - capture: true to capture the mouse, false to release it
+ * Maximize the window.
  */
-void frCaptureMouse(FrWindow* pWindow, bool capture);
+void frMaximizeWindow(void);
+
+/*
+ * Capture the mouse.
+ * 
+ * Parameters:
+ * - capture: true to capture the mouse, false to release it.
+ */
+void frCaptureMouse(bool capture);
 
 /*
  * Get the state of a key
@@ -133,24 +181,24 @@ FrKeyState frGetKeyState(FrKey key);
 /* Handlers */
 
 /*
- * Set the mouse move handler
- * - pWindow: pointer to the window
- * - handler: the handler
+ * Set the mouse move handler.
+ * - handler: The handler.
+ * - pUserData: The user data.
  */
-void frSetMouseMoveHandler(FrWindow* pWindow, FrMouseMoveHandler handler, void* pUserData);
+void frSetMouseMoveHandler(FrMouseMoveHandler handler, void* pUserData);
 
 /*
- * Set the key handler
- * - pWindow: pointer to the window
- * - handler: the handler
+ * Set the key handler.
+ * - handler: The handler.
+ * - pUserData: The user data.
  */
-void frSetKeyHandler(FrWindow* pWindow, FrKeyHandler handler, void* pUserData);
+void frSetKeyHandler(FrKeyHandler handler, void* pUserData);
 
 /*
- * Set the resize handler
- * - pWindow: pointer to the window
- * - handler: the handler
+ * Set the resize handler.
+ * - handler: The handler.
+ * - pUserData: The user data.
  */
-void frSetResizeHandler(FrWindow* pWindow, FrResizeHandler handler, void* pUserData);
+void frSetResizeHandler(FrResizeHandler handler, void* pUserData);
 
 #endif

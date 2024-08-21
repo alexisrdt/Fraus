@@ -200,7 +200,7 @@ static FrResult frBuildInflateTable(uint8_t tableLength, const uint8_t* pSymbolL
 {
 	// Genreate ranges
 	FrInflateRange* pRanges = malloc(symbolCount * sizeof(FrInflateRange));
-	if(!pRanges) return FR_ERROR_OUT_OF_MEMORY;
+	if(!pRanges) return FR_ERROR_OUT_OF_HOST_MEMORY;
 	pRanges[0] = (FrInflateRange){.lastSymbol = 0, .length = pSymbolLength[0]};
 
 	uint16_t rangeCount = 0;
@@ -221,7 +221,7 @@ static FrResult frBuildInflateTable(uint8_t tableLength, const uint8_t* pSymbolL
 	if(!pNextCodes)
 	{
 		free(pRanges);
-		return FR_ERROR_OUT_OF_MEMORY;
+		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
 	pNextCodes[0] = 0;
 
@@ -241,7 +241,7 @@ static FrResult frBuildInflateTable(uint8_t tableLength, const uint8_t* pSymbolL
 	{
 		free(pRanges);
 		free(pNextCodes);
-		return FR_ERROR_OUT_OF_MEMORY;
+		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
 
 	// Build table entries
@@ -299,7 +299,7 @@ static FrResult frBuildInflateTable(uint8_t tableLength, const uint8_t* pSymbolL
 				free(pRanges);
 				free(pNextCodes);
 
-				return FR_ERROR_OUT_OF_MEMORY;
+				return FR_ERROR_OUT_OF_HOST_MEMORY;
 			}
 			pTable[prefix].length = maxLength;
 		}
@@ -520,7 +520,7 @@ static FrResult frInflateBlock(FrInflateData* pData)
 		FrInflateTableEntry* pCodeLengthTable;
 		if(frBuildInflateTable(FR_CODE_LENGTH_TABLE_BIT_LENGTH, pCodeLengthSymbolLength, 19, pCodeLengthLengthCount, codeLengthMaxLength, &pCodeLengthTable) != FR_SUCCESS)
 		{
-			return FR_ERROR_OUT_OF_MEMORY;
+			return FR_ERROR_OUT_OF_HOST_MEMORY;
 		}
 
 		// Read literal/length and distance codes lengths
@@ -616,14 +616,14 @@ static FrResult frInflateBlock(FrInflateData* pData)
 	// Create literal/length table
 	if(frBuildInflateTable(FR_LITERAL_LENGTH_TABLE_BIT_LENGTH, pLiteralLengthSymbolLength, 286, pLiteralLengthLengthCount, literalLengthMaxLength, &pLiteralLengthTable) != FR_SUCCESS)
 	{
-		return FR_ERROR_OUT_OF_MEMORY;
+		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
 
 	// Create distance table
 	if(frBuildInflateTable(FR_DISTANCE_TABLE_BIT_LENGTH, pDistanceSymbolLength, 32, pDistanceLengthCount, distanceMaxLength, &pDistanceTable) != FR_SUCCESS)
 	{
 		frFreeInflateTable(pLiteralLengthTable, FR_LITERAL_LENGTH_TABLE_BIT_LENGTH);
-		return FR_ERROR_OUT_OF_MEMORY;
+		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
 
 	// Read deflated data

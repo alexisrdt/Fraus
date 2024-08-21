@@ -9,12 +9,12 @@
 
 typedef struct FrModel
 {
-	FrVertex* pVertices;
+	FrVertex* vertices;
 	uint32_t vertexCount;
-	uint32_t* pIndexes;
+	uint32_t* indexes;
 	uint32_t indexCount;
 } FrModel;
 
-FrResult frLoadOBJ(const char* pPath, FrModel* pModel);
+FrResult frLoadOBJ(const char* path, FrModel* pModel);
 
 #endif

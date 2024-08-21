@@ -8,7 +8,7 @@ typedef struct Fr##name##Vector \
 { \
 	size_t size; \
 	size_t capacity; \
-	type* pData; \
+	type* data; \
 } Fr##name##Vector; \
 \
 FrResult frCreate##name##Vector(Fr##name##Vector* pVector); \
@@ -21,7 +21,7 @@ FrResult frCreate##name##Vector(Fr##name##Vector* pVector) \
 { \
 	pVector->size = 0; \
 	pVector->capacity = 0; \
-	pVector->pData = NULL; \
+	pVector->data = NULL; \
 \
 	return FR_SUCCESS; \
 } \
@@ -30,15 +30,15 @@ FrResult frCreateAndReserve##name##Vector(Fr##name##Vector* pVector, size_t capa
 { \
 	pVector->size = 0; \
 	pVector->capacity = capacity; \
-	pVector->pData = malloc(capacity * sizeof(type)); \
-	if(!pVector->pData) return FR_ERROR_OUT_OF_MEMORY; \
+	pVector->data = malloc(capacity * sizeof(type)); \
+	if(!pVector->data) return FR_ERROR_OUT_OF_HOST_MEMORY; \
 \
 	return FR_SUCCESS; \
 } \
 \
 void frDestroy##name##Vector(Fr##name##Vector* pVector) \
 { \
-	free(pVector->pData); \
+	free(pVector->data); \
 } \
 \
 FrResult frPushBack##name##Vector(Fr##name##Vector* pVector, type value) \
@@ -47,14 +47,17 @@ FrResult frPushBack##name##Vector(Fr##name##Vector* pVector, type value) \
 	{ \
 		size_t newCapacity = pVector->capacity == 0 ? 1 : pVector->capacity * 2; \
 \
-		type* pNewData = realloc(pVector->pData, newCapacity * sizeof(type)); \
-		if(!pNewData) return FR_ERROR_OUT_OF_MEMORY; \
+		type* newData = realloc(pVector->data, newCapacity * sizeof(type)); \
+		if(!newData) \
+		{ \
+			return FR_ERROR_OUT_OF_HOST_MEMORY; \
+		} \
 \
-		pVector->pData = pNewData; \
+		pVector->data = newData; \
 		pVector->capacity = newCapacity; \
 	} \
 \
-	pVector->pData[pVector->size++] = value; \
+	pVector->data[pVector->size++] = value; \
 \
 	return FR_SUCCESS; \
 }

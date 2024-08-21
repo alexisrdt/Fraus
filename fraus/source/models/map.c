@@ -6,8 +6,11 @@
 
 FrResult frCreateMap(uint32_t size, FrMap* pMap)
 {
-	pMap->ppNodes = calloc(size, sizeof(FrMapNode*));
-	if(!pMap->ppNodes) return FR_ERROR_OUT_OF_MEMORY;
+	pMap->nodes = calloc(size, sizeof(pMap->nodes[0]));
+	if(!pMap->nodes)
+	{
+		return FR_ERROR_OUT_OF_HOST_MEMORY;
+	}
 
 	pMap->size = size;
 
@@ -24,14 +27,14 @@ static inline uint32_t frHash(const FrVertex* pVertex)
 {
 	uint32_t hash = 65521;
 
-	FrFloat positionX = { .value = pVertex->position.x };
-	FrFloat positionY = { .value = pVertex->position.y };
-	FrFloat positionZ = { .value = pVertex->position.z };
-	FrFloat textureU = { .value = pVertex->textureCoordinates.u };
-	FrFloat textureV = { .value = pVertex->textureCoordinates.v };
-	FrFloat normalX = { .value = pVertex->normal.x };
-	FrFloat normalY = { .value = pVertex->normal.y };
-	FrFloat normalZ = { .value = pVertex->normal.z };
+	const FrFloat positionX = {.value = pVertex->position.x};
+	const FrFloat positionY = {.value = pVertex->position.y};
+	const FrFloat positionZ = {.value = pVertex->position.z};
+	const FrFloat textureU = {.value = pVertex->textureCoordinates.u};
+	const FrFloat textureV = {.value = pVertex->textureCoordinates.v};
+	const FrFloat normalX = {.value = pVertex->normal.x};
+	const FrFloat normalY = {.value = pVertex->normal.y};
+	const FrFloat normalZ = {.value = pVertex->normal.z};
 
 	hash ^= positionX.bits * 2;
 	hash ^= positionY.bits * 3;
@@ -47,7 +50,7 @@ static inline uint32_t frHash(const FrVertex* pVertex)
 
 static inline bool frCompareVertices(const FrVertex* pFirst, const FrVertex* pSecond)
 {
-	return memcmp(pFirst, pSecond, sizeof(FrVertex)) == 0;
+	return memcmp(pFirst, pSecond, sizeof(*pFirst)) == 0;
 }
 
 FrResult frGetOrInsertMap(FrMap* pMap, const FrVertex* pKey, uint32_t newValue, uint32_t* pValue)
@@ -55,7 +58,7 @@ FrResult frGetOrInsertMap(FrMap* pMap, const FrVertex* pKey, uint32_t newValue, 
 	const uint32_t hash = frHash(pKey);
 	const uint32_t index = hash % pMap->size;
 
-	FrMapNode* pNode = pMap->ppNodes[index];
+	FrMapNode* pNode = pMap->nodes[index];
 	while(pNode)
 	{
 		if(frCompareVertices(&pNode->key, pKey))
@@ -67,14 +70,17 @@ FrResult frGetOrInsertMap(FrMap* pMap, const FrVertex* pKey, uint32_t newValue, 
 		pNode = pNode->pNext;
 	}
 
-	FrMapNode* pNewNode = malloc(sizeof(FrMapNode));
-	if(!pNewNode) return FR_ERROR_OUT_OF_MEMORY;
+	FrMapNode* const pNewNode = malloc(sizeof(*pNewNode));
+	if(!pNewNode)
+	{
+		return FR_ERROR_OUT_OF_HOST_MEMORY;
+	}
 
 	pNewNode->key = *pKey;
 	pNewNode->value = newValue;
-	pNewNode->pNext = pMap->ppNodes[index];
+	pNewNode->pNext = pMap->nodes[index];
 
-	pMap->ppNodes[index] = pNewNode;
+	pMap->nodes[index] = pNewNode;
 
 	*pValue = newValue;
 
@@ -88,7 +94,7 @@ void frDestroyMap(FrMap* pMap)
 	
 	while(pMap->size--)
 	{
-		pNode = pMap->ppNodes[pMap->size];
+		pNode = pMap->nodes[pMap->size];
 		while(pNode)
 		{
 			pNext = pNode->pNext;
@@ -97,5 +103,5 @@ void frDestroyMap(FrMap* pMap)
 		}
 	}
 
-	free(pMap->ppNodes);
+	free(pMap->nodes);
 }

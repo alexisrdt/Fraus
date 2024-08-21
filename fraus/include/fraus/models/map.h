@@ -15,7 +15,7 @@ typedef struct FrMapNode
 
 typedef struct FrMap
 {
-	FrMapNode** ppNodes;
+	FrMapNode** nodes;
 	uint32_t size;
 } FrMap;
 

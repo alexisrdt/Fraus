@@ -16,9 +16,9 @@
 #define FR_REVERSE_BYTE(byte) \
 (((byte & 1) << 7) | ((byte & 2) << 5) | ((byte & 4) << 3) | ((byte & 8) << 1) | ((byte & 16) >> 1) | ((byte & 32) >> 3) | ((byte & 64) >> 5) | ((byte & 128) >> 7))
 
-static uint32_t frCRC(const uint8_t* pData, uint32_t size)
+static uint32_t frCrc(const uint8_t* data, uint32_t size)
 {
-	static const uint32_t pCRCTable[256] = {
+	static const uint32_t crcTable[256] = {
 		0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA,
 		0x076DC419, 0x706AF48F, 0xE963A535, 0x9E6495A3,
 		0x0EDB8832, 0x79DCB8A4, 0xE0D5E91E, 0x97D2D988,
@@ -85,14 +85,14 @@ static uint32_t frCRC(const uint8_t* pData, uint32_t size)
 		0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D
 	};
 
-	uint32_t CRC = 0xFFFFFFFF;
+	uint32_t crc = UINT32_MAX;
 
 	while(size--)
 	{
-		CRC = pCRCTable[(CRC & 0xFF) ^ *pData++] ^ (CRC >> 8);
+		crc = crcTable[(crc & UINT8_MAX) ^ *data++] ^ (crc >> 8);
 	}
 
-	return ~CRC;
+	return ~crc;
 }
 
 static uint8_t frPaeth(uint8_t a, uint8_t b, uint8_t c)
@@ -103,16 +103,25 @@ static uint8_t frPaeth(uint8_t a, uint8_t b, uint8_t c)
 	const int16_t pb = (int16_t)abs(p - b);
 	const int16_t pc = (int16_t)abs(p - c);
 
-	if(pa <= pb && pa <= pc) return a;
-	if(pb <= pc) return b;
+	if(pa <= pb && pa <= pc)
+	{
+		return a;
+	}
+	if(pb <= pc)
+	{
+		return b;
+	}
 	return c;
 }
 
-FrResult frLoadPNG(const char* pPath, FrImage* pImage)
+FrResult frLoadPNG(const char* path, FrImage* pImage)
 {
 	// Open file
-	FILE* file = fopen(pPath, "rb");
-	if(!file) return errno == ENOENT ? FR_ERROR_FILE_NOT_FOUND : FR_ERROR_UNKNOWN;
+	FILE* const file = fopen(path, "rb");
+	if(!file)
+	{
+		return errno == ENOENT ? FR_ERROR_FILE_NOT_FOUND : FR_ERROR_UNKNOWN;
+	}
 
 	// Check PNG signature
 	uint8_t signature[8];
@@ -139,19 +148,19 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 	bool first = true;
 	bool dataChunksStarted = false;
 	bool dataChunksFinished = false;
-	uint8_t* pData = NULL;
-	uint8_t* pTypeAndData = NULL;
+	uint8_t* data = NULL;
+	uint8_t* typeAndData = NULL;
 	size_t dataSize = 0;
 
 	// Loop through PNG chunks
 	while(true)
 	{
 		// Read chunk length
-		uint8_t pLengthBuffer[4];
-		if(fread(pLengthBuffer, 1, 4, file) != 4)
+		uint8_t lengthBuffer[4];
+		if(fread(lengthBuffer, 1, 4, file) != 4)
 		{
-			free(pTypeAndData);
-			free(pData);
+			free(typeAndData);
+			free(data);
 			if(getc(file) == EOF)
 			{
 				fclose(file);
@@ -160,82 +169,82 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			fclose(file);
 			return FR_ERROR_UNKNOWN;
 		}
-		uint32_t length = FR_MSBF_TO_U32(pLengthBuffer);
+		uint32_t length = FR_MSBF_TO_U32(lengthBuffer);
 		if(length >= (1u << 0x1F))
 		{
-			free(pTypeAndData);
-			free(pData);
+			free(typeAndData);
+			free(data);
 			fclose(file);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
 		// Read chunk type and data
-		uint8_t* pNewTypeAndData = realloc(pTypeAndData, length + 4);
-		if(!pNewTypeAndData)
+		uint8_t* const newTypeAndData = realloc(typeAndData, length + 4);
+		if(!newTypeAndData)
 		{
-			free(pTypeAndData);
-			free(pData);
+			free(typeAndData);
+			free(data);
 			fclose(file);
 			return FR_ERROR_UNKNOWN;
 		}
-		pTypeAndData = pNewTypeAndData;
-		if(fread(pTypeAndData, 1, length + 4, file) != length + 4)
+		typeAndData = newTypeAndData;
+		if(fread(typeAndData, 1, length + 4, file) != length + 4)
 		{
-			free(pTypeAndData);
-			free(pData);
+			free(typeAndData);
+			free(data);
 			fclose(file);
 			return FR_ERROR_UNKNOWN;
 		}
 
 		// Read chunk CRC
-		uint8_t pCRCBuffer[4];
-		if(fread(pCRCBuffer, 1, 4, file) != 4)
+		uint8_t crcBuffer[4];
+		if(fread(crcBuffer, 1, 4, file) != 4)
 		{
-			free(pTypeAndData);
-			free(pData);
+			free(typeAndData);
+			free(data);
 			fclose(file);
 			return FR_ERROR_UNKNOWN;
 		}
-		uint32_t CRC = FR_MSBF_TO_U32(pCRCBuffer);
+		uint32_t crc = FR_MSBF_TO_U32(crcBuffer);
 
 		// Check chunk CRC
-		if(frCRC(pTypeAndData, length + 4) != CRC)
+		if(frCrc(typeAndData, length + 4) != crc)
 		{
-			free(pTypeAndData);
-			free(pData);
+			free(typeAndData);
+			free(data);
 			fclose(file);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
 		// IHDR chunk
 		if(
-			pTypeAndData[0] == 'I' &&
-			pTypeAndData[1] == 'H' &&
-			pTypeAndData[2] == 'D' &&
-			pTypeAndData[3] == 'R'
+			typeAndData[0] == 'I' &&
+			typeAndData[1] == 'H' &&
+			typeAndData[2] == 'D' &&
+			typeAndData[3] == 'R'
 		)
 		{
 			// IHDR should be first
 			if(length != 13 || !first)
 			{
-				free(pTypeAndData);
-				free(pData);
+				free(typeAndData);
+				free(data);
 				fclose(file);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 
 			// Read image dimnesions
-			pImage->width = FR_MSBF_TO_U32(pTypeAndData + 4);
-			pImage->height = FR_MSBF_TO_U32(pTypeAndData + 8);
+			pImage->width = FR_MSBF_TO_U32(typeAndData + 4);
+			pImage->height = FR_MSBF_TO_U32(typeAndData + 8);
 			if(pImage->width == 0 || pImage->height == 0)
 			{
-				free(pTypeAndData);
+				free(typeAndData);
 				fclose(file);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 
 			// Read color type
-			switch(pTypeAndData[13])
+			switch(typeAndData[13])
 			{
 				case 0:
 					pImage->type = FR_GRAY;
@@ -258,16 +267,16 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 					break;
 
 				default:
-					free(pTypeAndData);
+					free(typeAndData);
 					fclose(file);
 					return FR_ERROR_CORRUPTED_FILE;
 			}
 
 			// Allocate data
-			pImage->pData = malloc(pImage->width * pImage->height * pImage->type);
-			if(!pImage->pData)
+			pImage->data = malloc(pImage->width * pImage->height * pImage->type);
+			if(!pImage->data)
 			{
-				free(pTypeAndData);
+				free(typeAndData);
 				fclose(file);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
@@ -278,25 +287,25 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 		// Check IHDR chunk was encountered
 		if(first)
 		{
-			free(pTypeAndData);
-			free(pData);
+			free(typeAndData);
+			free(data);
 			fclose(file);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
 		// IDAT chunk
 		if(
-			pTypeAndData[0] == 'I' &&
-			pTypeAndData[1] == 'D' &&
-			pTypeAndData[2] == 'A' &&
-			pTypeAndData[3] == 'T'
+			typeAndData[0] == 'I' &&
+			typeAndData[1] == 'D' &&
+			typeAndData[2] == 'A' &&
+			typeAndData[3] == 'T'
 		)
 		{
 			// Check length and still in data block
 			if(length == 0 || dataChunksFinished)
 			{
-				free(pTypeAndData);
-				free(pData);
+				free(typeAndData);
+				free(data);
 				fclose(file);
 				return FR_ERROR_UNKNOWN;
 			}
@@ -304,34 +313,34 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			if(!dataChunksStarted) dataChunksStarted = true;
 
 			// Read data
-			uint8_t* pNewData = (uint8_t*)realloc(pData, dataSize + length);
-			if(!pNewData)
+			uint8_t* const newData = realloc(data, dataSize + length);
+			if(!newData)
 			{
-				free(pTypeAndData);
-				free(pData);
+				free(typeAndData);
+				free(data);
 				fclose(file);
 				return FR_ERROR_UNKNOWN;
 			}
-			pData = pNewData;
+			data = newData;
 
-			memcpy(pData + dataSize, pTypeAndData + 4, length);
+			memcpy(data + dataSize, typeAndData + 4, length);
 
 			dataSize += length;
 		}
 
 		// IEND chunk
 		if(
-			pTypeAndData[0] == 'I' &&
-			pTypeAndData[1] == 'E' &&
-			pTypeAndData[2] == 'N' &&
-			pTypeAndData[3] == 'D'
+			typeAndData[0] == 'I' &&
+			typeAndData[1] == 'E' &&
+			typeAndData[2] == 'N' &&
+			typeAndData[3] == 'D'
 		)
 		{
 			// Check end of file
 			if(length != 0 || getc(file) != EOF)
 			{
-				free(pTypeAndData);
-				free(pData);
+				free(typeAndData);
+				free(data);
 				fclose(file);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
@@ -339,7 +348,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			break;
 		}
 	}
-	free(pTypeAndData);
+	free(typeAndData);
 
 	// Close file
 	fclose(file);
@@ -347,51 +356,51 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 	// Check PNG has some data
 	if(dataSize == 0)
 	{
-		free(pData);
+		free(data);
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
 	// Check zlib header corruption
-	if(FR_MSBF_TO_U16(pData) % 31 != 0)
+	if(FR_MSBF_TO_U16(data) % 31 != 0)
 	{
-		free(pData);
+		free(data);
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
 	// Check zlib compression method
-	if((pData[0] & 0x0F) != 8)
+	if((data[0] & 0x0F) != 8)
 	{
-		free(pData);
+		free(data);
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
 	// Check deflate window size
-	uint8_t encoded_window = (pData[0] & 0xF0) >> 4;
-	if(encoded_window > 7)
+	const uint8_t encodedWindow = (data[0] & 0xF0) >> 4;
+	if(encodedWindow > 7)
 	{
-		free(pData);
+		free(data);
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
 	// Check preset dictionnary
-	if(pData[1] & 0x20)
+	if(data[1] & 0x20)
 	{
-		free(pData);
+		free(data);
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
-	size_t resultSize = (size_t)pImage->height * ((size_t)pImage->width * (size_t)pImage->type + 1);
-	uint8_t* pInflateResult = malloc(resultSize);
-	if(!pInflateResult)
+	const size_t resultSize = (size_t)pImage->height * ((size_t)pImage->width * (size_t)pImage->type + 1);
+	uint8_t* const inflateResult = malloc(resultSize);
+	if(!inflateResult)
 	{
-		free(pData);
-		return FR_ERROR_OUT_OF_MEMORY;
+		free(data);
+		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
-	FrResult result = frInflate(pData + 2, dataSize - 6, pInflateResult);
+	const FrResult result = frInflate(data + 2, dataSize - 6, inflateResult);
 	if(result != FR_SUCCESS)
 	{
-		free(pData);
-		free(pInflateResult);
+		free(data);
+		free(inflateResult);
 		return result;
 	}
 
@@ -399,27 +408,27 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 	uint32_t s1 = 1, s2 = 0;
 	for(size_t i = 0; i < resultSize; ++i)
 	{
-		s1 = (s1 + pInflateResult[i]) % 65521;
+		s1 = (s1 + inflateResult[i]) % 65521;
 		s2 = (s2 + s1) % 65521;
 	}
-	if((s2 << 0x10 | s1) != FR_MSBF_TO_U32(pData + dataSize - 4))
+	if((s2 << 0x10 | s1) != FR_MSBF_TO_U32(data + dataSize - 4))
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
 	// Free compressed data
-	free(pData);
+	free(data);
 
 	// Undo filtering
 	for(uint32_t i = 0; i < pImage->height; ++i)
 	{
-		switch(pInflateResult[(pImage->width * pImage->type + 1) * i])
+		switch(inflateResult[(pImage->width * pImage->type + 1) * i])
 		{
 			// Same byte
 			case 0:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1];
+					pImage->data[pImage->width * pImage->type * i + j] = inflateResult[(pImage->width * pImage->type + 1) * i + j + 1];
 				}
 				break;
 
@@ -427,7 +436,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 1:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + (j < (uint32_t)pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j]);
+					pImage->data[pImage->width * pImage->type * i + j] = inflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + (j < (uint32_t)pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j]);
 				}
 				break;
 
@@ -435,7 +444,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 2:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + pImage->pData[pImage->width * pImage->type * (i - 1) + j];
+					pImage->data[pImage->width * pImage->type * i + j] = inflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + pImage->data[pImage->width * pImage->type * (i - 1) + j];
 				}
 				break;
 
@@ -443,7 +452,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 3:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->pData[pImage->width * pImage->type * i + j] = pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + ((j < (uint32_t)pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j]) + pImage->pData[pImage->width * pImage->type * (i - 1) + j]) / 2;
+					pImage->data[pImage->width * pImage->type * i + j] = inflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + ((j < (uint32_t)pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j]) + pImage->data[pImage->width * pImage->type * (i - 1) + j]) / 2;
 				}
 				break;
 
@@ -451,12 +460,12 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 			case 4:
 				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
 				{
-					pImage->pData[pImage->width * pImage->type * i + j] =
-						pInflateResult[(pImage->width * pImage->type + 1) * i + j + 1] +
+					pImage->data[pImage->width * pImage->type * i + j] =
+						inflateResult[(pImage->width * pImage->type + 1) * i + j + 1] +
 						frPaeth(
-							j < (uint32_t)pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * i - 1) + j],
-							i == 0 ? 0 : (pImage->pData[pImage->width * pImage->type * (i - 1) + j]),
-							i == 0 ? 0 : (j < (uint32_t)pImage->type ? 0 : pImage->pData[pImage->type * (pImage->width * (i - 1) - 1) + j])
+							j < (uint32_t)pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j],
+							i == 0 ? 0 : (pImage->data[pImage->width * pImage->type * (i - 1) + j]),
+							i == 0 ? 0 : (j < (uint32_t)pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * (i - 1) - 1) + j])
 						);
 				}
 				break;
@@ -467,7 +476,7 @@ FrResult frLoadPNG(const char* pPath, FrImage* pImage)
 		}
 	}
 
-	free(pInflateResult);
+	free(inflateResult);
 
 	return FR_SUCCESS;
 }
