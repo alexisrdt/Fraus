@@ -15,6 +15,6 @@ typedef struct FrModel
 	uint32_t indexCount;
 } FrModel;
 
-FrResult frLoadOBJ(const char* path, FrModel* pModel);
+FrResult frLoadOBJ(const char* path, FrModel* model);
 
 #endif

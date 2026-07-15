@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-void frMergeSorted(size_t firstCount, const void* first, size_t secondCount, const void* second, void* restrict final, size_t elementSize, FrCompareFunction compare)
+void frMergeSorted(const size_t firstCount, const void* const first, const size_t secondCount, const void* const second, void* restrict const final, const size_t elementSize, const FrCompareFunction compare)
 {
 	const char* firstChar = first;
 	const char* secondChar = second;

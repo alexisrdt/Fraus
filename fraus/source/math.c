@@ -2,57 +2,57 @@
 
 #include <math.h>
 
-float frDot(const FrVec3* pFirst, const FrVec3* pSecond)
+float frDot(const FrVec3* const first, const FrVec3* const second)
 {
-	return pFirst->x * pSecond->x + pFirst->y * pSecond->y + pFirst->z * pSecond->z;
+	return first->x * second->x + first->y * second->y + first->z * second->z;
 }
 
-void frNormalize(FrVec3* pVector)
+void frNormalize(FrVec3* const vector)
 {
-	const float magnitude = sqrtf(frDot(pVector, pVector));
+	const float magnitude = sqrtf(frDot(vector, vector));
 
-	pVector->x /= magnitude;
-	pVector->y /= magnitude;
-	pVector->z /= magnitude;
+	vector->x /= magnitude;
+	vector->y /= magnitude;
+	vector->z /= magnitude;
 }
 
-FrVec3 frCross(const FrVec3* pFirst, const FrVec3* pSecond)
+FrVec3 frCross(const FrVec3* const first, const FrVec3* const second)
 {
 	return (FrVec3){
-		.x = pFirst->y * pSecond->z - pFirst->z * pSecond->y,
-		.y = pFirst->z * pSecond->x - pFirst->x * pSecond->z,
-		.z = pFirst->x * pSecond->y - pFirst->y * pSecond->x
+		.x = first->y * second->z - first->z * second->y,
+		.y = first->z * second->x - first->x * second->z,
+		.z = first->x * second->y - first->y * second->x
 	};
 }
 
-FrVec3 frScale(const FrVec3* pVector, float scalar)
+FrVec3 frScale(const FrVec3* const vector, const float scalar)
 {
 	return (FrVec3){
-		.x = pVector->x * scalar,
-		.y = pVector->y * scalar,
-		.z = pVector->z * scalar
+		.x = vector->x * scalar,
+		.y = vector->y * scalar,
+		.z = vector->z * scalar
 	};
 }
 
-FrVec3 frAdd(const FrVec3* pFirst, const FrVec3* pSecond)
+FrVec3 frAdd(const FrVec3* const first, const FrVec3* const second)
 {
 	return (FrVec3) {
-		.x = pFirst->x + pSecond->x,
-		.y = pFirst->y + pSecond->y,
-		.z = pFirst->z + pSecond->z
+		.x = first->x + second->x,
+		.y = first->y + second->y,
+		.z = first->z + second->z
 	};
 }
 
-FrVec3 frSubstract(const FrVec3* pFirst, const FrVec3* pSecond)
+FrVec3 frSubstract(const FrVec3* const first, const FrVec3* const second)
 {
 	return (FrVec3){
-		.x = pFirst->x - pSecond->x,
-		.y = pFirst->y - pSecond->y,
-		.z = pFirst->z - pSecond->z
+		.x = first->x - second->x,
+		.y = first->y - second->y,
+		.z = first->z - second->z
 	};
 }
 
-void frIdentity(float matrix[16])
+void frIdentity(float matrix[const 16])
 {
 	matrix[ 0] = 1.f;
 	matrix[ 1] = 0.f;
@@ -72,7 +72,7 @@ void frIdentity(float matrix[16])
 	matrix[15] = 1.f;
 }
 
-void frTranslation(float matrix[16], float x, float y, float z)
+void frTranslation(float matrix[const 16], const float x, const float y, const float z)
 {
 	matrix[ 0] = 1.f;
 	matrix[ 1] = 0.f;
@@ -92,7 +92,7 @@ void frTranslation(float matrix[16], float x, float y, float z)
 	matrix[15] = 1.f;
 }
 
-void frZRotation(float matrix[16], float angle)
+void frZRotation(float matrix[const 16], const float angle)
 {
 	const float c = cosf(angle);
 	const float s = sinf(angle);
@@ -115,7 +115,7 @@ void frZRotation(float matrix[16], float angle)
 	matrix[15] = 1.f;
 }
 
-void frScaling(float matrix[16], float x, float y, float z)
+void frScaling(float matrix[const 16], const float x, const float y, const float z)
 {
 	matrix[ 0] =   x;
 	matrix[ 1] = 0.f;
@@ -136,27 +136,27 @@ void frScaling(float matrix[16], float x, float y, float z)
 
 }
 
-void frLookDir(float matrix[16], const FrVec3* pEye, const FrVec3* pForward, const FrVec3* pRight, const FrVec3* pUp)
+void frLookDir(float matrix[const 16], const FrVec3* const eye, const FrVec3* const forward, const FrVec3* const right, const FrVec3* const up)
 {
-	matrix[ 0] = pRight->x;
-	matrix[ 1] = pForward->x;
-	matrix[ 2] = pUp->x;
+	matrix[ 0] = right->x;
+	matrix[ 1] = forward->x;
+	matrix[ 2] = up->x;
 	matrix[ 3] = 0.f;
-	matrix[ 4] = pRight->y;
-	matrix[ 5] = pForward->y;
-	matrix[ 6] = pUp->y;
+	matrix[ 4] = right->y;
+	matrix[ 5] = forward->y;
+	matrix[ 6] = up->y;
 	matrix[ 7] = 0.f;
-	matrix[ 8] = pRight->z;
-	matrix[ 9] = pForward->z;
-	matrix[10] = pUp->z;
+	matrix[ 8] = right->z;
+	matrix[ 9] = forward->z;
+	matrix[10] = up->z;
 	matrix[11] = 0.f;
-	matrix[12] = -frDot(pEye, pRight);
-	matrix[13] = -frDot(pEye, pForward);
-	matrix[14] = -frDot(pEye, pUp);
+	matrix[12] = -frDot(eye, right);
+	matrix[13] = -frDot(eye, forward);
+	matrix[14] = -frDot(eye, up);
 	matrix[15] = 1.f;
 }
 
-void frLookAt(float matrix[16], const FrVec3* pEye, const FrVec3* pObjective)
+void frLookAt(float matrix[const 16], const FrVec3* const eye, const FrVec3* const objective)
 {
 	const FrVec3 worldUp = {
 		.x = 0.f,
@@ -164,7 +164,7 @@ void frLookAt(float matrix[16], const FrVec3* pEye, const FrVec3* pObjective)
 		.z = 1.f
 	};
 
-	FrVec3 forward = frSubstract(pObjective, pEye);
+	FrVec3 forward = frSubstract(objective, eye);
 	frNormalize(&forward);
 
 	FrVec3 right = frCross(&forward, &worldUp);
@@ -173,10 +173,10 @@ void frLookAt(float matrix[16], const FrVec3* pEye, const FrVec3* pObjective)
 	const FrVec3 up = frCross(&right, &forward);
 	// No need to normalize, forward and right are orthonormal
 
-	frLookDir(matrix, pEye, &forward, &right, &up);
+	frLookDir(matrix, eye, &forward, &right, &up);
 }
 
-void frPerspective(float matrix[16], float fov, float aspect, float near, float far)
+void frPerspective(float matrix[const 16], const float fov, const float aspect, const float near, const float far)
 {
 	const float inv = 1 / tanf(fov / 2.f);
 	const float frac = far / (far - near);
@@ -199,7 +199,7 @@ void frPerspective(float matrix[16], float fov, float aspect, float near, float 
 	matrix[15] = 0.f;
 }
 
-void frPerspectiveInfiniteFar(float matrix[16], float fov, float aspect, float near)
+void frPerspectiveInfiniteFar(float matrix[const 16], const float fov, const float aspect, const float near)
 {
 	const float inv = 1 / tanf(fov / 2.f);
 
@@ -221,22 +221,22 @@ void frPerspectiveInfiniteFar(float matrix[16], float fov, float aspect, float n
 	matrix[15] = 0.f;
 }
 
-void frMultiply(const float* restrict pFirst, const float* restrict pSecond, float* restrict pResult)
+void frMultiply(const float* restrict const first, const float* restrict const second, float* restrict const result)
 {
-	pResult[ 0] = pFirst[ 0] * pSecond[ 0] + pFirst[ 1] * pSecond[ 4] + pFirst[ 2] * pSecond[ 8] + pFirst[ 3] * pSecond[12];
-	pResult[ 1] = pFirst[ 0] * pSecond[ 1] + pFirst[ 1] * pSecond[ 5] + pFirst[ 2] * pSecond[ 9] + pFirst[ 3] * pSecond[13];
-	pResult[ 2] = pFirst[ 0] * pSecond[ 2] + pFirst[ 1] * pSecond[ 6] + pFirst[ 2] * pSecond[10] + pFirst[ 3] * pSecond[14];
-	pResult[ 3] = pFirst[ 0] * pSecond[ 3] + pFirst[ 1] * pSecond[ 7] + pFirst[ 2] * pSecond[11] + pFirst[ 3] * pSecond[15];
-	pResult[ 4] = pFirst[ 4] * pSecond[ 0] + pFirst[ 5] * pSecond[ 4] + pFirst[ 6] * pSecond[ 8] + pFirst[ 7] * pSecond[12];
-	pResult[ 5] = pFirst[ 4] * pSecond[ 1] + pFirst[ 5] * pSecond[ 5] + pFirst[ 6] * pSecond[ 9] + pFirst[ 7] * pSecond[13];
-	pResult[ 6] = pFirst[ 4] * pSecond[ 2] + pFirst[ 5] * pSecond[ 6] + pFirst[ 6] * pSecond[10] + pFirst[ 7] * pSecond[14];
-	pResult[ 7] = pFirst[ 4] * pSecond[ 3] + pFirst[ 5] * pSecond[ 7] + pFirst[ 6] * pSecond[11] + pFirst[ 7] * pSecond[15];
-	pResult[ 8] = pFirst[ 8] * pSecond[ 0] + pFirst[ 9] * pSecond[ 4] + pFirst[10] * pSecond[ 8] + pFirst[11] * pSecond[12];
-	pResult[ 9] = pFirst[ 8] * pSecond[ 1] + pFirst[ 9] * pSecond[ 5] + pFirst[10] * pSecond[ 9] + pFirst[11] * pSecond[13];
-	pResult[10] = pFirst[ 8] * pSecond[ 2] + pFirst[ 9] * pSecond[ 6] + pFirst[10] * pSecond[10] + pFirst[11] * pSecond[14];
-	pResult[11] = pFirst[ 8] * pSecond[ 3] + pFirst[ 9] * pSecond[ 7] + pFirst[10] * pSecond[11] + pFirst[11] * pSecond[15];
-	pResult[12] = pFirst[12] * pSecond[ 0] + pFirst[13] * pSecond[ 4] + pFirst[14] * pSecond[ 8] + pFirst[15] * pSecond[12];
-	pResult[13] = pFirst[12] * pSecond[ 1] + pFirst[13] * pSecond[ 5] + pFirst[14] * pSecond[ 9] + pFirst[15] * pSecond[13];
-	pResult[14] = pFirst[12] * pSecond[ 2] + pFirst[13] * pSecond[ 6] + pFirst[14] * pSecond[10] + pFirst[15] * pSecond[14];
-	pResult[15] = pFirst[12] * pSecond[ 3] + pFirst[13] * pSecond[ 7] + pFirst[14] * pSecond[11] + pFirst[15] * pSecond[15];
+	result[ 0] = first[ 0] * second[ 0] + first[ 1] * second[ 4] + first[ 2] * second[ 8] + first[ 3] * second[12];
+	result[ 1] = first[ 0] * second[ 1] + first[ 1] * second[ 5] + first[ 2] * second[ 9] + first[ 3] * second[13];
+	result[ 2] = first[ 0] * second[ 2] + first[ 1] * second[ 6] + first[ 2] * second[10] + first[ 3] * second[14];
+	result[ 3] = first[ 0] * second[ 3] + first[ 1] * second[ 7] + first[ 2] * second[11] + first[ 3] * second[15];
+	result[ 4] = first[ 4] * second[ 0] + first[ 5] * second[ 4] + first[ 6] * second[ 8] + first[ 7] * second[12];
+	result[ 5] = first[ 4] * second[ 1] + first[ 5] * second[ 5] + first[ 6] * second[ 9] + first[ 7] * second[13];
+	result[ 6] = first[ 4] * second[ 2] + first[ 5] * second[ 6] + first[ 6] * second[10] + first[ 7] * second[14];
+	result[ 7] = first[ 4] * second[ 3] + first[ 5] * second[ 7] + first[ 6] * second[11] + first[ 7] * second[15];
+	result[ 8] = first[ 8] * second[ 0] + first[ 9] * second[ 4] + first[10] * second[ 8] + first[11] * second[12];
+	result[ 9] = first[ 8] * second[ 1] + first[ 9] * second[ 5] + first[10] * second[ 9] + first[11] * second[13];
+	result[10] = first[ 8] * second[ 2] + first[ 9] * second[ 6] + first[10] * second[10] + first[11] * second[14];
+	result[11] = first[ 8] * second[ 3] + first[ 9] * second[ 7] + first[10] * second[11] + first[11] * second[15];
+	result[12] = first[12] * second[ 0] + first[13] * second[ 4] + first[14] * second[ 8] + first[15] * second[12];
+	result[13] = first[12] * second[ 1] + first[13] * second[ 5] + first[14] * second[ 9] + first[15] * second[13];
+	result[14] = first[12] * second[ 2] + first[13] * second[ 6] + first[14] * second[10] + first[15] * second[14];
+	result[15] = first[12] * second[ 3] + first[13] * second[ 7] + first[14] * second[11] + first[15] * second[15];
 }

@@ -1,50 +1,55 @@
 #include "../../include/fraus/vulkan/vulkan_utils.h"
 
 #include "../../include/fraus/images/images.h"
-#include "./functions.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-FrResult frFindMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* pIndex)
+VkResult frFindMemoryTypeIndex(FrEngine* const engine, const uint32_t typeBits, const VkMemoryPropertyFlags properties, uint32_t* const index)
 {
-	VkPhysicalDeviceMemoryProperties memoryProperties;
-	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
-
-	uint32_t memoryTypeIndex;
-	for(memoryTypeIndex = 0; memoryTypeIndex < memoryProperties.memoryTypeCount; ++memoryTypeIndex)
+	*index = engine->memoryProperties.memoryProperties.memoryTypeCount;
+	for(uint32_t memoryTypeIndex = 0; memoryTypeIndex < engine->memoryProperties.memoryProperties.memoryTypeCount; ++memoryTypeIndex)
 	{
 		if(
 			(typeBits & (1 << memoryTypeIndex)) &&
-			(memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & properties) == properties
+			(engine->memoryProperties.memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & properties) == properties
 		)
 		{
-			break;
+			if(
+				*index == engine->memoryProperties.memoryProperties.memoryTypeCount ||
+				engine->memoryProperties.memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags < engine->memoryProperties.memoryProperties.memoryTypes[*index].propertyFlags
+			)
+			{
+				*index = memoryTypeIndex;
+
+				if(engine->memoryProperties.memoryProperties.memoryTypes[*index].propertyFlags == properties)
+				{
+					break;
+				}
+			}
 		}
 	}
-	if(memoryTypeIndex >= memoryProperties.memoryTypeCount)
+	if(*index >= engine->memoryProperties.memoryProperties.memoryTypeCount)
 	{
-		return FR_ERROR_UNKNOWN;
+		return VK_ERROR_UNKNOWN;
 	}
 
-	*pIndex = memoryTypeIndex;
-
-	return FR_SUCCESS;
+	return VK_SUCCESS;
 }
 
-FrResult frBeginCommandBuffer(VkCommandBuffer* pCommandBuffer)
+VkResult frBeginCommandBuffer(FrEngine* const engine, VkCommandBuffer* const commandBuffer)
 {
 	// Create command buffer
 	const VkCommandBufferAllocateInfo allocateInfo = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-		.commandPool = commandPools[frameInFlightIndex],
+		.commandPool = engine->commandPools[engine->frameInFlightIndex],
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		.commandBufferCount = 1
 	};
-	if(vkAllocateCommandBuffers(device, &allocateInfo, pCommandBuffer) != VK_SUCCESS)
+	VkResult result = engine->vkAllocateCommandBuffers(engine->device, &allocateInfo, commandBuffer);
+	if(result != VK_SUCCESS)
 	{
-		return FR_ERROR_UNKNOWN;
+		return result;
 	}
 
 	// Begin command buffer
@@ -52,50 +57,69 @@ FrResult frBeginCommandBuffer(VkCommandBuffer* pCommandBuffer)
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
 	};
-	if(vkBeginCommandBuffer(*pCommandBuffer, &beginInfo) != VK_SUCCESS)
+	result = engine->vkBeginCommandBuffer(*commandBuffer, &beginInfo);
+	if(result != VK_SUCCESS)
 	{
-		vkFreeCommandBuffers(device, commandPools[frameInFlightIndex], 1, pCommandBuffer);
-		return FR_ERROR_UNKNOWN;
+		engine->vkFreeCommandBuffers(engine->device, engine->commandPools[engine->frameInFlightIndex], 1, commandBuffer);
 	}
 
-	return FR_SUCCESS;
+	return result;
 }
 
-FrResult frEndCommandBuffer(VkCommandBuffer commandBuffer)
+VkResult frEndCommandBuffer(FrEngine* const engine, const VkCommandBuffer commandBuffer)
 {
 	// End command buffer
-	if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+	VkResult result = engine->vkEndCommandBuffer(commandBuffer);
+	if(result != VK_SUCCESS)
 	{
-		vkFreeCommandBuffers(device, commandPools[frameInFlightIndex], 1, &commandBuffer);
-		return FR_ERROR_UNKNOWN;
+		engine->vkFreeCommandBuffers(engine->device, engine->commandPools[engine->frameInFlightIndex], 1, &commandBuffer);
+		return result;
 	}
 
 	// Submit to queue
-	const VkSubmitInfo submitInfo = {
-		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.commandBufferCount = 1,
-		.pCommandBuffers = &commandBuffer
-	};
-	if(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+	if(engine->hasSynchronization2)
 	{
-		vkFreeCommandBuffers(device, commandPools[frameInFlightIndex], 1, &commandBuffer);
-		return FR_ERROR_UNKNOWN;
+		const VkCommandBufferSubmitInfo commandBufferInfo = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+			.commandBuffer = commandBuffer
+		};
+		const VkSubmitInfo2 submitInfo = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+			.commandBufferInfoCount = 1,
+			.pCommandBufferInfos = &commandBufferInfo
+		};
+		result = engine->vkQueueSubmit2(engine->queue, 1, &submitInfo, nullptr);
+		if(result != VK_SUCCESS)
+		{
+			engine->vkFreeCommandBuffers(engine->device, engine->commandPools[engine->frameInFlightIndex], 1, &commandBuffer);
+			return result;
+		}
+	}
+	else
+	{
+		const VkSubmitInfo submitInfo = {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+			.commandBufferCount = 1,
+			.pCommandBuffers = &commandBuffer
+		};
+		result = engine->vkQueueSubmit(engine->queue, 1, &submitInfo, nullptr);
+		if(result != VK_SUCCESS)
+		{
+			engine->vkFreeCommandBuffers(engine->device, engine->commandPools[engine->frameInFlightIndex], 1, &commandBuffer);
+			return result;
+		}
 	}
 
 	// Wait idle
-	if(vkQueueWaitIdle(queue) != VK_SUCCESS)
-	{
-		vkFreeCommandBuffers(device, commandPools[frameInFlightIndex], 1, &commandBuffer);
-		return FR_ERROR_UNKNOWN;
-	}
+	result = engine->vkQueueWaitIdle(engine->queue);
 
 	// Free command buffer
-	vkFreeCommandBuffers(device, commandPools[frameInFlightIndex], 1, &commandBuffer);
+	engine->vkFreeCommandBuffers(engine->device, engine->commandPools[engine->frameInFlightIndex], 1, &commandBuffer);
 
-	return FR_SUCCESS;
+	return result;
 }
 
-FrResult frCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* pBuffer, VkDeviceMemory* pBufferMemory)
+VkResult frCreateBuffer(FrEngine* const engine, const VkDeviceSize size, const VkBufferUsageFlags usage, const VkMemoryPropertyFlags properties, VkBuffer* const buffer, VkDeviceMemory* const bufferMemory)
 {
 	// Create buffer
 	const VkBufferCreateInfo createInfo = {
@@ -105,20 +129,22 @@ FrResult frCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPro
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE
 	};
 
-	if(vkCreateBuffer(device, &createInfo, NULL, pBuffer) != VK_SUCCESS)
+	VkResult result = engine->vkCreateBuffer(engine->device, &createInfo, nullptr, buffer);
+	if(result != VK_SUCCESS)
 	{
-		return FR_ERROR_UNKNOWN;
+		return result;
 	}
 
 	// Memory allocation
 	VkMemoryRequirements memoryRequirements;
-	vkGetBufferMemoryRequirements(device, *pBuffer, &memoryRequirements);
+	engine->vkGetBufferMemoryRequirements(engine->device, *buffer, &memoryRequirements);
 
 	uint32_t memoryTypeIndex;
-	if(frFindMemoryTypeIndex(memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex) != FR_SUCCESS)
+	result = frFindMemoryTypeIndex(engine, memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyBuffer(device, *pBuffer, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyBuffer(engine->device, *buffer, nullptr);
+		return result;
 	}
 
 	const VkMemoryAllocateInfo allocateInfo = {
@@ -127,106 +153,152 @@ FrResult frCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPro
 		.memoryTypeIndex = memoryTypeIndex
 	};
 
-	if(vkAllocateMemory(device, &allocateInfo, NULL, pBufferMemory) != VK_SUCCESS)
+	result = engine->vkAllocateMemory(engine->device, &allocateInfo, nullptr, bufferMemory);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyBuffer(device, *pBuffer, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyBuffer(engine->device, *buffer, nullptr);
+		return result;
 	}
 
-	if(vkBindBufferMemory(device, *pBuffer, *pBufferMemory, 0) != VK_SUCCESS)
+	result = engine->vkBindBufferMemory(engine->device, *buffer, *bufferMemory, 0);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyBuffer(device, *pBuffer, NULL);
-		vkFreeMemory(device, *pBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyBuffer(engine->device, *buffer, nullptr);
+		engine->vkFreeMemory(engine->device, *bufferMemory, nullptr);
 	}
 
-	return FR_SUCCESS;
+	return result;
 }
 
-FrResult frCopyBuffer(VkBuffer sourceBuffer, VkBuffer destinationBuffer, VkDeviceSize size)
+VkResult frCopyBuffer(FrEngine* const engine, const VkBuffer sourceBuffer, const VkBuffer destinationBuffer, const VkDeviceSize size)
 {
 	// Create command buffer
 	VkCommandBuffer commandBuffer;
-	if(frBeginCommandBuffer(&commandBuffer) != FR_SUCCESS)
+	const VkResult result = frBeginCommandBuffer(engine, &commandBuffer);
+	if(result != VK_SUCCESS)
 	{
-		return FR_ERROR_UNKNOWN;
+		return result;
 	}
 
 	// Copy buffer
 	const VkBufferCopy region = {
 		.size = size
 	};
-	vkCmdCopyBuffer(commandBuffer, sourceBuffer, destinationBuffer, 1, &region);
+	engine->vkCmdCopyBuffer(commandBuffer, sourceBuffer, destinationBuffer, 1, &region);
 
 	// End command buffer
-	if(frEndCommandBuffer(commandBuffer) != FR_SUCCESS)
-	{
-		return FR_ERROR_UNKNOWN;
-	}
-
-	return FR_SUCCESS;
+	return frEndCommandBuffer(engine, commandBuffer);
 }
 
-static FrResult frTransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
+static VkResult frTransitionImageLayout(FrEngine* const engine, const VkImage image, const VkImageLayout oldLayout, const VkImageLayout newLayout, const uint32_t mipLevels)
 {
 	VkCommandBuffer commandBuffer;
-	if(frBeginCommandBuffer(&commandBuffer) != FR_SUCCESS)
+	const VkResult result = frBeginCommandBuffer(engine, &commandBuffer);
+	if(result != VK_SUCCESS)
 	{
-		return FR_ERROR_UNKNOWN;
+		return result;
 	}
 
-	VkPipelineStageFlags sourceStage, destinationStage;
-
-	VkImageMemoryBarrier barrier = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-		.oldLayout = oldLayout,
-		.newLayout = newLayout,
-		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.image = image,
-		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-		.subresourceRange.baseMipLevel = 0,
-		.subresourceRange.levelCount = mipLevels,
-		.subresourceRange.baseArrayLayer = 0,
-		.subresourceRange.layerCount = 1
-	};
-
-	if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+	if(engine->hasSynchronization2)
 	{
-		barrier.srcAccessMask = 0;
-		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		VkImageMemoryBarrier2 barrier = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+			.oldLayout = oldLayout,
+			.newLayout = newLayout,
+			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.image = image,
+			.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.subresourceRange.baseMipLevel = 0,
+			.subresourceRange.levelCount = mipLevels,
+			.subresourceRange.baseArrayLayer = 0,
+			.subresourceRange.layerCount = 1
+		};
 
-		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-		destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-	}
-	else if(oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-	{
-		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+		{
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
 
-		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+			barrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+		}
+		else if(oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+		{
+			barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+
+			barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+			barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+		}
+		else
+		{
+			engine->vkFreeCommandBuffers(engine->device, engine->commandPools[engine->frameInFlightIndex], 1, &commandBuffer);
+			return VK_ERROR_UNKNOWN;
+		}
+
+		const VkDependencyInfo dependency = {
+			.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+			.imageMemoryBarrierCount = 1,
+			.pImageMemoryBarriers = &barrier
+		};
+
+		engine->vkCmdPipelineBarrier2(commandBuffer, &dependency);
 	}
 	else
 	{
-		vkFreeCommandBuffers(device, commandPools[frameInFlightIndex], 1, &commandBuffer);
-		return FR_ERROR_INVALID_ARGUMENT;
+		VkPipelineStageFlags sourceStage, destinationStage;
+
+		VkImageMemoryBarrier barrier = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+			.oldLayout = oldLayout,
+			.newLayout = newLayout,
+			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.image = image,
+			.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.subresourceRange.baseMipLevel = 0,
+			.subresourceRange.levelCount = mipLevels,
+			.subresourceRange.baseArrayLayer = 0,
+			.subresourceRange.layerCount = 1
+		};
+
+		if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+		{
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		}
+		else if(oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+		{
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+			destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		}
+		else
+		{
+			engine->vkFreeCommandBuffers(engine->device, engine->commandPools[engine->frameInFlightIndex], 1, &commandBuffer);
+			return VK_ERROR_UNKNOWN;
+		}
+
+		engine->vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 	}
 
-	vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
-
-	if(frEndCommandBuffer(commandBuffer) != FR_SUCCESS)
-	{
-		return FR_ERROR_UNKNOWN;
-	}
-
-	return FR_SUCCESS;
+	return frEndCommandBuffer(engine, commandBuffer);
 }
 
-static FrResult frCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+static VkResult frCopyBufferToImage(FrEngine* const engine, const VkBuffer buffer, const VkImage image, const uint32_t width, const uint32_t height)
 {
 	VkCommandBuffer commandBuffer;
-	if(frBeginCommandBuffer(&commandBuffer) != FR_SUCCESS) return FR_ERROR_UNKNOWN;
+	const VkResult result = frBeginCommandBuffer(engine, &commandBuffer);
+	if(result != VK_SUCCESS)
+	{
+		return result;
+	}
 
 	const VkBufferImageCopy region = {
 		.bufferOffset = 0,
@@ -239,17 +311,12 @@ static FrResult frCopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t wid
 		.imageOffset = {0, 0, 0},
 		.imageExtent = {width, height, 1}
 	};
-	vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+	engine->vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-	if(frEndCommandBuffer(commandBuffer) != FR_SUCCESS)
-	{
-		return FR_ERROR_UNKNOWN;
-	}
-
-	return FR_SUCCESS;
+	return frEndCommandBuffer(engine, commandBuffer);
 }
 
-FrResult frCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits samples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* pImage, VkDeviceMemory* pImageMemory)
+VkResult frCreateImage(FrEngine* const engine, const uint32_t width, const uint32_t height, const uint32_t mipLevels, const VkSampleCountFlagBits samples, const VkFormat format, const VkImageTiling tiling, const VkImageUsageFlags usage, const VkMemoryPropertyFlags properties, VkImage* const image, VkDeviceMemory* const imageMemory)
 {
 	// Create image
 	const VkImageCreateInfo createInfo = {
@@ -267,20 +334,22 @@ FrResult frCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSa
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
 		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
 	};
-	if(vkCreateImage(device, &createInfo, NULL, pImage) != VK_SUCCESS)
+	VkResult result = engine->vkCreateImage(engine->device, &createInfo, nullptr, image);
+	if(result != VK_SUCCESS)
 	{
-		return FR_ERROR_UNKNOWN;
+		return result;
 	}
 
 	// Memory allocation
 	VkMemoryRequirements memoryRequirements;
-	vkGetImageMemoryRequirements(device, *pImage, &memoryRequirements);
+	engine->vkGetImageMemoryRequirements(engine->device, *image, &memoryRequirements);
 
 	uint32_t memoryTypeIndex;
-	if(frFindMemoryTypeIndex(memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex) != FR_SUCCESS)
+	result = frFindMemoryTypeIndex(engine, memoryRequirements.memoryTypeBits, properties, &memoryTypeIndex);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyImage(device, *pImage, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyImage(engine->device, *image, nullptr);
+		return result;
 	}
 
 	const VkMemoryAllocateInfo allocateInfo = {
@@ -289,23 +358,24 @@ FrResult frCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSa
 		.memoryTypeIndex = memoryTypeIndex
 	};
 
-	if(vkAllocateMemory(device, &allocateInfo, NULL, pImageMemory) != VK_SUCCESS)
+	result = engine->vkAllocateMemory(engine->device, &allocateInfo, nullptr, imageMemory);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyImage(device, *pImage, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyImage(engine->device, *image, nullptr);
+		return result;
 	}
 
-	if(vkBindImageMemory(device, *pImage, *pImageMemory, 0) != VK_SUCCESS)
+	result = engine->vkBindImageMemory(engine->device, *image, *imageMemory, 0);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyImage(device, *pImage, NULL);
-		vkFreeMemory(device, *pImageMemory, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyImage(engine->device, *image, nullptr);
+		engine->vkFreeMemory(engine->device, *imageMemory, nullptr);
 	}
 
-	return FR_SUCCESS;
+	return result;
 }
 
-FrResult frCreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels, VkImageView* pImageView)
+VkResult frCreateImageView(FrEngine* const engine, const VkImage image, const VkFormat format, const VkImageAspectFlags aspectFlags, const uint32_t mipLevels, VkImageView* const imageView)
 {
 	const VkImageViewCreateInfo createInfo = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -323,27 +393,32 @@ FrResult frCreateImageView(VkImage image, VkFormat format, VkImageAspectFlags as
 		.subresourceRange.layerCount = 1
 	};
 
-	if(vkCreateImageView(device, &createInfo, NULL, pImageView) != VK_SUCCESS)
-	{
-		return FR_ERROR_UNKNOWN;
-	}
-
-	return FR_SUCCESS;
+	return engine->vkCreateImageView(engine->device, &createInfo, nullptr, imageView);
 }
 
-static FrResult frGenerateMipmap(VkImage image, VkFormat format, uint32_t width, uint32_t height, uint32_t mipLevels)
+static VkResult frGenerateMipmap(FrEngine* const engine, const VkImage image, const VkFormat format, const uint32_t width, const uint32_t height, const uint32_t mipLevels)
 {
-	VkFormatProperties formatProperties;
-	vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &formatProperties);
-	if(!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+	VkFormatProperties2 formatProperties;
+	if(engine->hasPhysicalDevice2)
 	{
-		return FR_ERROR_UNKNOWN;
+		formatProperties.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2;
+		formatProperties.pNext = nullptr;
+		engine->vkGetPhysicalDeviceFormatProperties2(engine->physicalDevice, format, &formatProperties);
+	}
+	else
+	{
+		engine->vkGetPhysicalDeviceFormatProperties(engine->physicalDevice, format, &formatProperties.formatProperties);
+	}
+	if(!(formatProperties.formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+	{
+		return VK_ERROR_FORMAT_NOT_SUPPORTED;
 	}
 
 	VkCommandBuffer commandBuffer;
-	if(frBeginCommandBuffer(&commandBuffer) != FR_SUCCESS)
+	const VkResult result = frBeginCommandBuffer(engine, &commandBuffer);
+	if(result != VK_SUCCESS)
 	{
-		return FR_ERROR_UNKNOWN;
+		return result;
 	}
 
 	VkImageMemoryBarrier barrier = {
@@ -353,21 +428,51 @@ static FrResult frGenerateMipmap(VkImage image, VkFormat format, uint32_t width,
 		.image = image,
 		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 		.subresourceRange.levelCount = 1,
-		.subresourceRange.baseArrayLayer = 0,
 		.subresourceRange.layerCount = 1
+	};
+
+	VkImageMemoryBarrier2 barrier2 = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.image = image,
+		.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+		.subresourceRange.levelCount = 1,
+		.subresourceRange.layerCount = 1
+	};
+
+	const VkDependencyInfo dependency = {
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &barrier2
 	};
 
 	uint32_t mipWidth = width;
 	uint32_t mipHeight = height;
 	for(uint32_t i = 1; i < mipLevels; ++i)
 	{
-		barrier.subresourceRange.baseMipLevel = i - 1;
-		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		if(engine->hasSynchronization2)
+		{
+			barrier2.subresourceRange.baseMipLevel = i - 1;
+			barrier2.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			barrier2.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			barrier2.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+			barrier2.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+			barrier2.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+			barrier2.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
 
-		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+			engine->vkCmdPipelineBarrier2(commandBuffer, &dependency);
+		}
+		else
+		{
+			barrier.subresourceRange.baseMipLevel = i - 1;
+			barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+			engine->vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+		}
 
 		const VkImageBlit blit = {
 			.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -383,14 +488,28 @@ static FrResult frGenerateMipmap(VkImage image, VkFormat format, uint32_t width,
 			.dstOffsets[0] = {0, 0, 0},
 			.dstOffsets[1] = {mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1}
 		};
-		vkCmdBlitImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+		engine->vkCmdBlitImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
 
-		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-		barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		if(engine->hasSynchronization2)
+		{
+			barrier2.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			barrier2.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			barrier2.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+			barrier2.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+			barrier2.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+			barrier2.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
 
-		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+			engine->vkCmdPipelineBarrier2(commandBuffer, &dependency);
+		}
+		else
+		{
+			barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			engine->vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+		}
 
 		if(mipWidth > 1)
 		{
@@ -402,34 +521,39 @@ static FrResult frGenerateMipmap(VkImage image, VkFormat format, uint32_t width,
 		}
 	}
 
-	barrier.subresourceRange.baseMipLevel = mipLevels - 1;
-	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
-
-	if(frEndCommandBuffer(commandBuffer) != FR_SUCCESS)
+	if(engine->hasSynchronization2)
 	{
-		return FR_ERROR_UNKNOWN;
+		barrier2.subresourceRange.baseMipLevel = mipLevels - 1;
+		barrier2.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barrier2.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		barrier2.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+		barrier2.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+		barrier2.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+		barrier2.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+
+		engine->vkCmdPipelineBarrier2(commandBuffer, &dependency);
+	}
+	else
+	{
+		barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		engine->vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 	}
 
-	return FR_SUCCESS;
+	return frEndCommandBuffer(engine, commandBuffer);
 }
 
-FrResult frCreateTexture(const char* path)
+VkResult frCreateTexture(FrEngine* const engine, const char* const path)
 {
-	if(frPushBackTextureVector(&textures, (FrTexture){0}) != FR_SUCCESS)
-	{
-		return FR_ERROR_UNKNOWN;
-	}
-
 	// Load image
 	FrImage image;
 	if(frLoadPNG(path, &image) != FR_SUCCESS)
 	{
-		return FR_ERROR_UNKNOWN;
+		return VK_ERROR_UNKNOWN;
 	}
 
 	// TODO: convert image type in frLoadPNG with parameter
@@ -439,7 +563,7 @@ FrResult frCreateTexture(const char* path)
 		if(!newData)
 		{
 			free(image.data);
-			return FR_ERROR_OUT_OF_HOST_MEMORY;
+			return VK_ERROR_OUT_OF_HOST_MEMORY;
 		}
 
 		for(size_t i = 0; i < image.width * image.height * FR_RGB; ++i)
@@ -456,10 +580,10 @@ FrResult frCreateTexture(const char* path)
 	// Compute mip levels
 	uint32_t maxDimension = image.width > image.height ? image.width : image.height;
 	maxDimension = maxDimension > 0 ? maxDimension : 1;
-	textureMipLevels = 1;
+	engine->textureMipLevels = 1;
 	while(maxDimension >>= 1)
 	{
-		++textureMipLevels;
+		++engine->textureMipLevels;
 	}
 
 	// Compute size
@@ -468,95 +592,106 @@ FrResult frCreateTexture(const char* path)
 	// Create staging buffer
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
-	if(frCreateBuffer(
+	VkResult result = frCreateBuffer(
+		engine,
 		size,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 		&stagingBuffer,
 		&stagingBufferMemory
-	) != FR_SUCCESS)
+	);
+	if(result != VK_SUCCESS)
 	{
 		free(image.data);
-		return FR_ERROR_UNKNOWN;
+		return result;
 	}
 
 	// Upload data to the device
 	void* data;
-	if(vkMapMemory(device, stagingBufferMemory, 0, size, 0, &data) != VK_SUCCESS)
+	result = engine->vkMapMemory(engine->device, stagingBufferMemory, 0, size, 0, &data);
+	if(result != VK_SUCCESS)
 	{
 		free(image.data);
-		return FR_ERROR_UNKNOWN;
+		return result;
 	}
 	memcpy(data, image.data, size);
-	vkUnmapMemory(device, stagingBufferMemory);
+	engine->vkUnmapMemory(engine->device, stagingBufferMemory);
 
 	// Free image
 	free(image.data);
 
 	// Create image
-	if(frCreateImage(
+	result = frCreateImage(
+		engine,
 		image.width,
 		image.height,
-		textureMipLevels,
+		engine->textureMipLevels,
 		VK_SAMPLE_COUNT_1_BIT,
 		VK_FORMAT_R8G8B8A8_SRGB,
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		&textures.data[textures.size - 1].image,
-		&textures.data[textures.size - 1].imageMemory
-	) != FR_SUCCESS)
+		&engine->textures[engine->textureCount].image,
+		&engine->textures[engine->textureCount].imageMemory
+	);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyBuffer(device, stagingBuffer, NULL);
-		vkFreeMemory(device, stagingBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyBuffer(engine->device, stagingBuffer, nullptr);
+		engine->vkFreeMemory(engine->device, stagingBufferMemory, nullptr);
+		return result;
 	}
 
 	// Copy data to image
-	if(frTransitionImageLayout(textures.data[textures.size - 1].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, textureMipLevels) != FR_SUCCESS)
+	result = frTransitionImageLayout(engine, engine->textures[engine->textureCount].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, engine->textureMipLevels);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyImage(device, textures.data[textures.size - 1].image, NULL);
-		vkFreeMemory(device, textures.data[textures.size - 1].imageMemory, NULL);
-		vkDestroyBuffer(device, stagingBuffer, NULL);
-		vkFreeMemory(device, stagingBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyImage(engine->device, engine->textures[engine->textureCount].image, nullptr);
+		engine->vkFreeMemory(engine->device, engine->textures[engine->textureCount].imageMemory, nullptr);
+		engine->vkDestroyBuffer(engine->device, stagingBuffer, nullptr);
+		engine->vkFreeMemory(engine->device, stagingBufferMemory, nullptr);
+		return VK_ERROR_UNKNOWN;
 	}
 
-	if(frCopyBufferToImage(stagingBuffer, textures.data[textures.size - 1].image, image.width, image.height) != FR_SUCCESS)
+	result = frCopyBufferToImage(engine, stagingBuffer, engine->textures[engine->textureCount].image, image.width, image.height);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyImage(device, textures.data[textures.size - 1].image, NULL);
-		vkFreeMemory(device, textures.data[textures.size - 1].imageMemory, NULL);
-		vkDestroyBuffer(device, stagingBuffer, NULL);
-		vkFreeMemory(device, stagingBufferMemory, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyImage(engine->device, engine->textures[engine->textureCount].image, nullptr);
+		engine->vkFreeMemory(engine->device, engine->textures[engine->textureCount].imageMemory, nullptr);
+		engine->vkDestroyBuffer(engine->device, stagingBuffer, nullptr);
+		engine->vkFreeMemory(engine->device, stagingBufferMemory, nullptr);
+		return result;
 	}
 
-	vkDestroyBuffer(device, stagingBuffer, NULL);
-	vkFreeMemory(device, stagingBufferMemory, NULL);
+	engine->vkDestroyBuffer(engine->device, stagingBuffer, nullptr);
+	engine->vkFreeMemory(engine->device, stagingBufferMemory, nullptr);
 
 	// Mipmap
-	if(frGenerateMipmap(textures.data[textures.size - 1].image, VK_FORMAT_R8G8B8A8_SRGB, image.width, image.height, textureMipLevels) != FR_SUCCESS)
+	result = frGenerateMipmap(engine, engine->textures[engine->textureCount].image, VK_FORMAT_R8G8B8A8_SRGB, image.width, image.height, engine->textureMipLevels);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyImage(device, textures.data[textures.size - 1].image, NULL);
-		vkFreeMemory(device, textures.data[textures.size - 1].imageMemory, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyImage(engine->device, engine->textures[engine->textureCount].image, nullptr);
+		engine->vkFreeMemory(engine->device, engine->textures[engine->textureCount].imageMemory, nullptr);
+		return result;
 	}
 
 	// If no mipmap
-	/* if(frTransitionImageLayout(textures.data[textures.size - 1].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, textureMipLevels) != FR_SUCCESS)
+	/* result = frTransitionImageLayout(engine, engine->textures[engine->textureCount].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, engine->textureMipLevels);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyImage(device, textures.data[textures.size - 1].image, NULL);
-		vkFreeMemory(device, textures.data[textures.size - 1].imageMemory, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyImage(engine->device, engine->textures[engine->textureCount].image, nullptr);
+		engine->vkFreeMemory(engine->device, engine->textures[engine->textureCount].imageMemory, nullptr);
+		return result;
 	} */
 
 	// Create image view
-	if(frCreateImageView(textures.data[textures.size - 1].image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, textureMipLevels, &textures.data[textures.size - 1].imageView) != FR_SUCCESS)
+	result = frCreateImageView(engine, engine->textures[engine->textureCount].image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, engine->textureMipLevels, &engine->textures[engine->textureCount].imageView);
+	if(result != VK_SUCCESS)
 	{
-		vkDestroyImage(device, textures.data[textures.size - 1].image, NULL);
-		vkFreeMemory(device, textures.data[textures.size - 1].imageMemory, NULL);
-		return FR_ERROR_UNKNOWN;
+		engine->vkDestroyImage(engine->device, engine->textures[engine->textureCount].image, nullptr);
+		engine->vkFreeMemory(engine->device, engine->textures[engine->textureCount].imageMemory, nullptr);
 	}
 
-	return FR_SUCCESS;
+	++engine->textureCount;
+
+	return result;
 }

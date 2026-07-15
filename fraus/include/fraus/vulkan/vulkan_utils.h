@@ -3,17 +3,17 @@
 
 #include "./include.h"
 
-FrResult frFindMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* pIndex);
+VkResult frFindMemoryTypeIndex(FrEngine* engine, uint32_t typeBits, VkMemoryPropertyFlags properties, uint32_t* index);
 
-FrResult frBeginCommandBuffer(VkCommandBuffer* pCommandBuffer);
-FrResult frEndCommandBuffer(VkCommandBuffer commandBuffer);
+VkResult frBeginCommandBuffer(FrEngine* engine, VkCommandBuffer* commandBuffer);
+VkResult frEndCommandBuffer(FrEngine* engine, VkCommandBuffer commandBuffer);
 
-FrResult frCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* pBuffer, VkDeviceMemory* pBufferMemory);
-FrResult frCopyBuffer(VkBuffer sourceBuffer, VkBuffer destinationBuffer, VkDeviceSize size);
+VkResult frCreateBuffer(FrEngine* engine, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory);
+VkResult frCopyBuffer(FrEngine* engine, VkBuffer sourceBuffer, VkBuffer destinationBuffer, VkDeviceSize size);
 
-FrResult frCreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits samples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* pImage, VkDeviceMemory* pImageMemory);
-FrResult frCreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels, VkImageView* pImageView);
+VkResult frCreateImage(FrEngine* engine, uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits samples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image, VkDeviceMemory* imageMemory);
+VkResult frCreateImageView(FrEngine* engine, VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels, VkImageView* imageView);
 
-FrResult frCreateTexture(const char* path);
+VkResult frCreateTexture(FrEngine* engine, const char* path);
 
 #endif

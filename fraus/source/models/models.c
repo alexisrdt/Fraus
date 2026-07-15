@@ -1,10 +1,9 @@
 #include "../../include/fraus/models/models.h"
 
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-FrResult frLoadOBJ(const char* path, FrModel* pModel)
+FrResult frLoadOBJ(const char* const path, FrModel* const model)
 {
 	// Open file
 	FILE* const file = fopen(path, "r");
@@ -50,9 +49,9 @@ FrResult frLoadOBJ(const char* path, FrModel* pModel)
 	// Read lines
 	char buffer[256];
 	uint32_t
-		pVertexIndex[3],
-		pTextureCoordinatesIndex[3],
-		pNormalIndex[3];
+		vertexIndex[3],
+		textureCoordinatesIndex[3],
+		normalIndex[3];
 	FrVertex faceVertex;
 	bool firstFace = true;
 	FrMap map;
@@ -174,8 +173,8 @@ FrResult frLoadOBJ(const char* path, FrModel* pModel)
 		{
 			if(firstFace)
 			{
-				pModel->vertices = malloc(vertexCount * sizeof(pModel->vertices[0]));
-				if(!pModel->vertices)
+				model->vertices = malloc(vertexCount * sizeof(model->vertices[0]));
+				if(!model->vertices)
 				{
 					free(normals);
 					free(textureCoordinates);
@@ -183,24 +182,24 @@ FrResult frLoadOBJ(const char* path, FrModel* pModel)
 					fclose(file);
 					return FR_ERROR_OUT_OF_HOST_MEMORY;
 				}
-				pModel->vertexCount = 0;
+				model->vertexCount = 0;
 
-				pModel->indexes = malloc(normalCount * sizeof(pModel->indexes[0]));
-				if(!pModel->indexes)
+				model->indexes = malloc(normalCount * sizeof(model->indexes[0]));
+				if(!model->indexes)
 				{
-					free(pModel->vertices);
+					free(model->vertices);
 					free(normals);
 					free(textureCoordinates);
 					free(vertices);
 					fclose(file);
 					return FR_ERROR_OUT_OF_HOST_MEMORY;
 				}
-				pModel->indexCount = 0;
+				model->indexCount = 0;
 
 				if(frCreateMap(vertexCount, &map) != FR_SUCCESS)
 				{
-					free(pModel->indexes);
-					free(pModel->vertices);
+					free(model->indexes);
+					free(model->vertices);
 					free(normals);
 					free(textureCoordinates);
 					free(vertices);
@@ -214,20 +213,20 @@ FrResult frLoadOBJ(const char* path, FrModel* pModel)
 			if(sscanf(
 				buffer,
 				"f %u/%u/%u %u/%u/%u %u/%u/%u",
-				&pVertexIndex[0],
-				&pTextureCoordinatesIndex[0],
-				&pNormalIndex[0],
-				&pVertexIndex[1],
-				&pTextureCoordinatesIndex[1],
-				&pNormalIndex[1],
-				&pVertexIndex[2],
-				&pTextureCoordinatesIndex[2],
-				&pNormalIndex[2]
+				&vertexIndex[0],
+				&textureCoordinatesIndex[0],
+				&normalIndex[0],
+				&vertexIndex[1],
+				&textureCoordinatesIndex[1],
+				&normalIndex[1],
+				&vertexIndex[2],
+				&textureCoordinatesIndex[2],
+				&normalIndex[2]
 			) != 9)
 			{
 				frDestroyMap(&map);
-				free(pModel->indexes);
-				free(pModel->vertices);
+				free(model->indexes);
+				free(model->vertices);
 				free(normals);
 				free(textureCoordinates);
 				free(vertices);
@@ -236,195 +235,195 @@ FrResult frLoadOBJ(const char* path, FrModel* pModel)
 			}
 
 			faceVertex = (FrVertex){
-				vertices[pVertexIndex[0] - 1],
-				textureCoordinates[pTextureCoordinatesIndex[0] - 1],
-				normals[pNormalIndex[0] - 1]
+				vertices[vertexIndex[0] - 1],
+				textureCoordinates[textureCoordinatesIndex[0] - 1],
+				normals[normalIndex[0] - 1]
 			};
 			if(frGetOrInsertMap(
 				&map,
 				&faceVertex,
-				pModel->vertexCount,
-				&pModel->indexes[pModel->indexCount]
+				model->vertexCount,
+				&model->indexes[model->indexCount]
 			) != FR_SUCCESS)
 			{
 				frDestroyMap(&map);
-				free(pModel->indexes);
-				free(pModel->vertices);
+				free(model->indexes);
+				free(model->vertices);
 				free(normals);
 				free(textureCoordinates);
 				free(vertices);
 				fclose(file);
 				return FR_ERROR_OUT_OF_HOST_MEMORY;
 			}
-			if(pModel->indexes[pModel->indexCount] == pModel->vertexCount)
+			if(model->indexes[model->indexCount] == model->vertexCount)
 			{
-				if(pModel->vertexCount == vertexCount)
+				if(model->vertexCount == vertexCount)
 				{
 					vertexCount *= 2;
-					FrVertex* const newVertices = realloc(pModel->vertices, vertexCount * sizeof(newVertices[0]));
+					FrVertex* const newVertices = realloc(model->vertices, vertexCount * sizeof(newVertices[0]));
 					if(!newVertices)
 					{
 						frDestroyMap(&map);
-						free(pModel->indexes);
-						free(pModel->vertices);
+						free(model->indexes);
+						free(model->vertices);
 						free(normals);
 						free(textureCoordinates);
 						free(vertices);
 						fclose(file);
 						return FR_ERROR_OUT_OF_HOST_MEMORY;
 					}
-					pModel->vertices = newVertices;
+					model->vertices = newVertices;
 				}
 
-				pModel->vertices[pModel->vertexCount] = faceVertex;
-				++pModel->vertexCount;
+				model->vertices[model->vertexCount] = faceVertex;
+				++model->vertexCount;
 			}
 
-			++pModel->indexCount;
-			if(pModel->indexCount == normalCount)
+			++model->indexCount;
+			if(model->indexCount == normalCount)
 			{
 				normalCount *= 2;
-				uint32_t* const newIndexes = realloc(pModel->indexes, normalCount * sizeof(newIndexes[0]));
+				uint32_t* const newIndexes = realloc(model->indexes, normalCount * sizeof(newIndexes[0]));
 				if(!newIndexes)
 				{
 					frDestroyMap(&map);
-					free(pModel->indexes);
-					free(pModel->vertices);
+					free(model->indexes);
+					free(model->vertices);
 					free(normals);
 					free(textureCoordinates);
 					free(vertices);
 					fclose(file);
 					return FR_ERROR_OUT_OF_HOST_MEMORY;
 				}
-				pModel->indexes = newIndexes;
+				model->indexes = newIndexes;
 			}
 
 			faceVertex = (FrVertex){
-				vertices[pVertexIndex[1] - 1],
-				textureCoordinates[pTextureCoordinatesIndex[1] - 1],
-				normals[pNormalIndex[1] - 1]
+				vertices[vertexIndex[1] - 1],
+				textureCoordinates[textureCoordinatesIndex[1] - 1],
+				normals[normalIndex[1] - 1]
 			};
 			if(frGetOrInsertMap(
 				&map,
 				&faceVertex,
-				pModel->vertexCount,
-				&pModel->indexes[pModel->indexCount]
+				model->vertexCount,
+				&model->indexes[model->indexCount]
 			) != FR_SUCCESS)
 			{
 				frDestroyMap(&map);
-				free(pModel->indexes);
-				free(pModel->vertices);
+				free(model->indexes);
+				free(model->vertices);
 				free(normals);
 				free(textureCoordinates);
 				free(vertices);
 				fclose(file);
 				return FR_ERROR_OUT_OF_HOST_MEMORY;
 			}
-			if(pModel->indexes[pModel->indexCount] == pModel->vertexCount)
+			if(model->indexes[model->indexCount] == model->vertexCount)
 			{
-				if(pModel->vertexCount == vertexCount)
+				if(model->vertexCount == vertexCount)
 				{
 					vertexCount *= 2;
-					FrVertex* const newVertices = realloc(pModel->vertices, vertexCount * sizeof(newVertices[0]));
+					FrVertex* const newVertices = realloc(model->vertices, vertexCount * sizeof(newVertices[0]));
 					if(!newVertices)
 					{
 						frDestroyMap(&map);
-						free(pModel->indexes);
-						free(pModel->vertices);
+						free(model->indexes);
+						free(model->vertices);
 						free(normals);
 						free(textureCoordinates);
 						free(vertices);
 						fclose(file);
 						return FR_ERROR_OUT_OF_HOST_MEMORY;
 					}
-					pModel->vertices = newVertices;
+					model->vertices = newVertices;
 				}
 
-				pModel->vertices[pModel->vertexCount] = faceVertex;
-				++pModel->vertexCount;
+				model->vertices[model->vertexCount] = faceVertex;
+				++model->vertexCount;
 			}
 
-			++pModel->indexCount;
-			if(pModel->indexCount == normalCount)
+			++model->indexCount;
+			if(model->indexCount == normalCount)
 			{
 				normalCount *= 2;
-				uint32_t* const newIndexes = realloc(pModel->indexes, normalCount * sizeof(newIndexes[0]));
+				uint32_t* const newIndexes = realloc(model->indexes, normalCount * sizeof(newIndexes[0]));
 				if(!newIndexes)
 				{
 					frDestroyMap(&map);
-					free(pModel->indexes);
-					free(pModel->vertices);
+					free(model->indexes);
+					free(model->vertices);
 					free(normals);
 					free(textureCoordinates);
 					free(vertices);
 					fclose(file);
 					return FR_ERROR_OUT_OF_HOST_MEMORY;
 				}
-				pModel->indexes = newIndexes;
+				model->indexes = newIndexes;
 			}
 
 			faceVertex = (FrVertex){
-				vertices[pVertexIndex[2] - 1],
-				textureCoordinates[pTextureCoordinatesIndex[2] - 1],
-				normals[pNormalIndex[2] - 1]
+				vertices[vertexIndex[2] - 1],
+				textureCoordinates[textureCoordinatesIndex[2] - 1],
+				normals[normalIndex[2] - 1]
 			};
 			if(frGetOrInsertMap(
 				&map,
 				&faceVertex,
-				pModel->vertexCount,
-				&pModel->indexes[pModel->indexCount]
+				model->vertexCount,
+				&model->indexes[model->indexCount]
 			) != FR_SUCCESS)
 			{
 				frDestroyMap(&map);
-				free(pModel->indexes);
-				free(pModel->vertices);
+				free(model->indexes);
+				free(model->vertices);
 				free(normals);
 				free(textureCoordinates);
 				free(vertices);
 				fclose(file);
 				return FR_ERROR_OUT_OF_HOST_MEMORY;
 			}
-			if(pModel->indexes[pModel->indexCount] == pModel->vertexCount)
+			if(model->indexes[model->indexCount] == model->vertexCount)
 			{
-				if(pModel->vertexCount == vertexCount)
+				if(model->vertexCount == vertexCount)
 				{
 					vertexCount *= 2;
-					FrVertex* const newVertices = realloc(pModel->vertices, vertexCount * sizeof(newVertices[0]));
+					FrVertex* const newVertices = realloc(model->vertices, vertexCount * sizeof(newVertices[0]));
 					if(!newVertices)
 					{
 						frDestroyMap(&map);
-						free(pModel->indexes);
-						free(pModel->vertices);
+						free(model->indexes);
+						free(model->vertices);
 						free(normals);
 						free(textureCoordinates);
 						free(vertices);
 						fclose(file);
 						return FR_ERROR_OUT_OF_HOST_MEMORY;
 					}
-					pModel->vertices = newVertices;
+					model->vertices = newVertices;
 				}
 
-				pModel->vertices[pModel->vertexCount] = faceVertex;
-				++pModel->vertexCount;
+				model->vertices[model->vertexCount] = faceVertex;
+				++model->vertexCount;
 			}
 
-			++pModel->indexCount;
-			if(pModel->indexCount == normalCount)
+			++model->indexCount;
+			if(model->indexCount == normalCount)
 			{
 				normalCount *= 2;
-				uint32_t* const newIndexes = realloc(pModel->indexes, normalCount * sizeof(newIndexes[0]));
+				uint32_t* const newIndexes = realloc(model->indexes, normalCount * sizeof(newIndexes[0]));
 				if(!newIndexes)
 				{
 					frDestroyMap(&map);
-					free(pModel->indexes);
-					free(pModel->vertices);
+					free(model->indexes);
+					free(model->vertices);
 					free(normals);
 					free(textureCoordinates);
 					free(vertices);
 					fclose(file);
 					return FR_ERROR_OUT_OF_HOST_MEMORY;
 				}
-				pModel->indexes = newIndexes;
+				model->indexes = newIndexes;
 			}
 		}
 	}
@@ -437,27 +436,27 @@ FrResult frLoadOBJ(const char* path, FrModel* pModel)
 
 	frDestroyMap(&map);
 
-	FrVertex* const finalVertices = realloc(pModel->vertices, pModel->vertexCount * sizeof(finalVertices[0]));
+	FrVertex* const finalVertices = realloc(model->vertices, model->vertexCount * sizeof(finalVertices[0]));
 	if(!finalVertices)
 	{
-		free(pModel->indexes);
-		free(pModel->vertices);
+		free(model->indexes);
+		free(model->vertices);
 		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
-	pModel->vertices = finalVertices;
-	for(uint32_t vertexIndex = 0; vertexIndex < pModel->vertexCount; ++vertexIndex)
+	model->vertices = finalVertices;
+	for(uint32_t vertexIndex = 0; vertexIndex < model->vertexCount; ++vertexIndex)
 	{
-		pModel->vertices[vertexIndex].textureCoordinates.y = textureCoordinateMax -  pModel->vertices[vertexIndex].textureCoordinates.y;
+		model->vertices[vertexIndex].textureCoordinates.y = textureCoordinateMax -  model->vertices[vertexIndex].textureCoordinates.y;
 	}
 
-	uint32_t* const finalIndexes = realloc(pModel->indexes, pModel->indexCount * sizeof(finalIndexes[0]));
+	uint32_t* const finalIndexes = realloc(model->indexes, model->indexCount * sizeof(finalIndexes[0]));
 	if(!finalIndexes)
 	{
-		free(pModel->indexes);
-		free(pModel->vertices);
+		free(model->indexes);
+		free(model->vertices);
 		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
-	pModel->indexes = finalIndexes;
+	model->indexes = finalIndexes;
 
 	return FR_SUCCESS;
 }

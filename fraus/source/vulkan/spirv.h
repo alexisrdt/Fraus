@@ -25,8 +25,8 @@ typedef struct FrShaderInfo
 	VkPushConstantRange* pushConstants;
 } FrShaderInfo;
 
-int frCompareBindings(const void* pAV, const void* pAB);
+int frCompareBindings(const void* aVoid, const void* bVoid);
 
-FrResult frParseSpirv(const uint32_t* code, size_t size, FrShaderInfo* pInfo);
+FrResult frParseSpirv(const uint32_t* code, size_t size, FrShaderInfo* info);
 
 #endif

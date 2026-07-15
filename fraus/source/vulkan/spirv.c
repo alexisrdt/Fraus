@@ -1,6 +1,5 @@
 #include "./spirv.h"
 
-#include <stdbool.h>
 #include <stdlib.h>
 
 #include <spirv-headers/spirv.h>
@@ -39,7 +38,7 @@ typedef struct FrSpvObject
 	};
 } FrSpvObject;
 
-static VkFormat frVariableFormat(uint32_t size, FrBaseType base)
+static VkFormat frVariableFormat(const uint32_t size, const FrBaseType base)
 {
 	switch(base)
 	{
@@ -114,45 +113,41 @@ static VkFormat frVariableFormat(uint32_t size, FrBaseType base)
 	return VK_FORMAT_UNDEFINED;
 }
 
-static int frCompareShaderVariable(const void* a, const void* b)
+static int frCompareShaderVariable(const void* const aVoid, const void* const bVoid)
 {
-	const FrShaderVariable* const pA = a;
-	const FrShaderVariable* const pB = b;
+	const FrShaderVariable* const a = aVoid;
+	const FrShaderVariable* const b = bVoid;
 
-	if(pA->location < pB->location)
+	if(a->location < b->location)
 	{
 		return -1;
 	}
-	if(pA->location > pB->location)
+	if(a->location > b->location)
 	{
 		return 1;
 	}
 	return 0;
 }
 
-int frCompareBindings(const void* pAV, const void* pBV)
+int frCompareBindings(const void* const aVoid, const void* const bVoid)
 {
-	const VkDescriptorSetLayoutBinding* pA = pAV;
-	const VkDescriptorSetLayoutBinding* pB = pBV;
+	const VkDescriptorSetLayoutBinding* const a = aVoid;
+	const VkDescriptorSetLayoutBinding* const b = bVoid;
 
-	if(pA->binding < pB->binding)
+	if(a->binding < b->binding)
 	{
 		return -1;
 	}
-	if(pA->binding > pB->binding)
+	if(a->binding > b->binding)
 	{
 		return 1;
 	}
 	return 0;
 }
 
-FrResult frParseSpirv(const uint32_t* code, size_t size, FrShaderInfo* pInfo)
+FrResult frParseSpirv(const uint32_t* const code, const size_t size, FrShaderInfo* const info)
 {
-	if(!code || size < 5 || !pInfo)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-	*pInfo = (FrShaderInfo){0};
+	*info = (FrShaderInfo){};
 
 	const uint32_t idsBound = code[3];
 	FrSpvObject* const objects = calloc(idsBound, sizeof(objects[0]));
@@ -310,19 +305,19 @@ FrResult frParseSpirv(const uint32_t* code, size_t size, FrShaderInfo* pInfo)
 					case SpvStorageClassInput:
 						if(objects[variableId].location)
 						{
-							++pInfo->inputCount;
+							++info->inputCount;
 						}
 						break;
 
 					case SpvStorageClassOutput:
 						if(objects[variableId].location)
 						{
-							++pInfo->outputCount;
+							++info->outputCount;
 						}
 						break;
 
 					case SpvStorageClassPushConstant:
-						++pInfo->pushConstantCount;
+						++info->pushConstantCount;
 						break;
 
 					default:
@@ -347,7 +342,7 @@ FrResult frParseSpirv(const uint32_t* code, size_t size, FrShaderInfo* pInfo)
 				switch(decoration)
 				{
 					case SpvDecorationBinding:
-						++pInfo->bindingCount;
+						++info->bindingCount;
 						objects[targetId].binding = code[i + 3] + 1;
 						break;
 
@@ -377,44 +372,44 @@ FrResult frParseSpirv(const uint32_t* code, size_t size, FrShaderInfo* pInfo)
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
-	if(pInfo->bindingCount)
+	if(info->bindingCount)
 	{
-		pInfo->bindings = malloc(pInfo->bindingCount * sizeof(pInfo->bindings[0]));
-		if(!pInfo->bindings)
+		info->bindings = malloc(info->bindingCount * sizeof(info->bindings[0]));
+		if(!info->bindings)
 		{
 			free(objects);
 			return FR_ERROR_OUT_OF_HOST_MEMORY;
 		}
 	}
-	if(pInfo->inputCount)
+	if(info->inputCount)
 	{
-		pInfo->inputs = malloc(pInfo->inputCount * sizeof(pInfo->inputs[0]));
-		if(!pInfo->inputs)
+		info->inputs = malloc(info->inputCount * sizeof(info->inputs[0]));
+		if(!info->inputs)
 		{
-			free(pInfo->bindings);
+			free(info->bindings);
 			free(objects);
 			return FR_ERROR_OUT_OF_HOST_MEMORY;
 		}
 	}
-	if(pInfo->outputCount)
+	if(info->outputCount)
 	{
-		pInfo->outputs = malloc(pInfo->outputCount * sizeof(pInfo->outputs[0]));
-		if(!pInfo->outputs)
+		info->outputs = malloc(info->outputCount * sizeof(info->outputs[0]));
+		if(!info->outputs)
 		{
-			free(pInfo->inputs);
-			free(pInfo->bindings);
+			free(info->inputs);
+			free(info->bindings);
 			free(objects);
 			return FR_ERROR_OUT_OF_HOST_MEMORY;
 		}
 	}
-	if(pInfo->pushConstantCount)
+	if(info->pushConstantCount)
 	{
-		pInfo->pushConstants = malloc(pInfo->pushConstantCount * sizeof(pInfo->pushConstants[0]));
-		if(!pInfo->pushConstants)
+		info->pushConstants = malloc(info->pushConstantCount * sizeof(info->pushConstants[0]));
+		if(!info->pushConstants)
 		{
-			free(pInfo->outputs);
-			free(pInfo->inputs);
-			free(pInfo->bindings);
+			free(info->outputs);
+			free(info->inputs);
+			free(info->bindings);
 			free(objects);
 			return FR_ERROR_OUT_OF_HOST_MEMORY;
 		}
@@ -427,7 +422,7 @@ FrResult frParseSpirv(const uint32_t* code, size_t size, FrShaderInfo* pInfo)
 	uint32_t outputCounter = 0;
 	uint32_t pushConstantCounter = 0;
 	uint32_t pushConstantOffset = 0;
-	while((bindingCounter < pInfo->bindingCount || inputCounter < pInfo->inputCount || outputCounter < pInfo->outputCount) && i > 0)
+	while((bindingCounter < info->bindingCount || inputCounter < info->inputCount || outputCounter < info->outputCount) && i > 0)
 	{
 		if(objects[i].objectType != SpvOpVariable)
 		{
@@ -437,44 +432,44 @@ FrResult frParseSpirv(const uint32_t* code, size_t size, FrShaderInfo* pInfo)
 
 		if(objects[i].storageClass == SpvStorageClassInput && objects[i].location)
 		{
-			pInfo->inputs[inputCounter].location = objects[i].location - 1;
-			pInfo->inputs[inputCounter].size = objects[i].size;
-			pInfo->inputs[inputCounter].format = frVariableFormat(objects[i].size, objects[i].base);
+			info->inputs[inputCounter].location = objects[i].location - 1;
+			info->inputs[inputCounter].size = objects[i].size;
+			info->inputs[inputCounter].format = frVariableFormat(objects[i].size, objects[i].base);
 			++inputCounter;
 		}
 		else if(objects[i].storageClass == SpvStorageClassOutput && objects[i].location)
 		{
-			pInfo->outputs[outputCounter].location = objects[i].location - 1;
-			pInfo->outputs[outputCounter].size = objects[i].size;
-			pInfo->outputs[outputCounter].format = frVariableFormat(objects[i].size, objects[i].base);
+			info->outputs[outputCounter].location = objects[i].location - 1;
+			info->outputs[outputCounter].size = objects[i].size;
+			info->outputs[outputCounter].format = frVariableFormat(objects[i].size, objects[i].base);
 			++outputCounter;
 		}
 		else if(objects[i].storageClass == SpvStorageClassPushConstant)
 		{
-			pInfo->pushConstants[pushConstantCounter].offset = pushConstantOffset;
-			pInfo->pushConstants[pushConstantCounter].size = objects[i].size;
+			info->pushConstants[pushConstantCounter].offset = pushConstantOffset;
+			info->pushConstants[pushConstantCounter].size = objects[i].size;
 			pushConstantOffset += objects[i].size;
 			++pushConstantCounter;
 		}
 		else if(objects[i].binding)
 		{
-			pInfo->bindings[bindingCounter].binding = objects[i].binding - 1;
-			pInfo->bindings[bindingCounter].descriptorCount = 1;
-			pInfo->bindings[bindingCounter].stageFlags = 0;
-			pInfo->bindings[bindingCounter].pImmutableSamplers = NULL;
+			info->bindings[bindingCounter].binding = objects[i].binding - 1;
+			info->bindings[bindingCounter].descriptorCount = 1;
+			info->bindings[bindingCounter].stageFlags = 0;
+			info->bindings[bindingCounter].pImmutableSamplers = nullptr;
 
 			switch(objects[i].storageClass)
 			{
 				case SpvStorageClassUniformConstant:
-					pInfo->bindings[bindingCounter].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+					info->bindings[bindingCounter].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 					break;
 
 				case SpvStorageClassUniform:
-					pInfo->bindings[bindingCounter].descriptorType = objects[i].hasBlockDecoration ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+					info->bindings[bindingCounter].descriptorType = objects[i].hasBlockDecoration ? VK_DESCRIPTOR_TYPE_STORAGE_BUFFER : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 					break;
 
 				case SpvStorageClassStorageBuffer:
-					pInfo->bindings[bindingCounter].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+					info->bindings[bindingCounter].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 					break;
 			
 				default:
@@ -489,17 +484,17 @@ FrResult frParseSpirv(const uint32_t* code, size_t size, FrShaderInfo* pInfo)
 
 	free(objects);
 
-	if(pInfo->inputs)
+	if(info->inputs)
 	{
-		qsort(pInfo->inputs, pInfo->inputCount, sizeof(pInfo->inputs[0]), frCompareShaderVariable);
+		qsort(info->inputs, info->inputCount, sizeof(info->inputs[0]), frCompareShaderVariable);
 	}
-	if(pInfo->outputs)
+	if(info->outputs)
 	{
-		qsort(pInfo->outputs, pInfo->outputCount, sizeof(pInfo->outputs[0]), frCompareShaderVariable);
+		qsort(info->outputs, info->outputCount, sizeof(info->outputs[0]), frCompareShaderVariable);
 	}
-	if(pInfo->bindings)
+	if(info->bindings)
 	{
-		qsort(pInfo->bindings, pInfo->bindingCount, sizeof(pInfo->bindings[0]), frCompareBindings);
+		qsort(info->bindings, info->bindingCount, sizeof(info->bindings[0]), frCompareBindings);
 	}
 
 	return FR_SUCCESS;

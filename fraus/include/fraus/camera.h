@@ -2,8 +2,7 @@
 #define FRAUS_CAMERA_H
 
 #include "./math.h"
-
-typedef struct FrVulkanData FrVulkanData;
+#include "./vulkan/include.h"
 
 typedef struct FrCamera
 {
@@ -19,12 +18,10 @@ typedef struct FrCamera
 	float rotationSpeed;
 } FrCamera;
 
-extern FrCamera camera;
-
 /*
  *  Create a default camera with close near plane and infinite far plane.
  */
-void frCreateCamera(void);
+void frCreateCamera(FrCamera* camera);
 
 /*
  * Get the camera view and projection matrix.
@@ -32,6 +29,6 @@ void frCreateCamera(void);
  * Parameters:
  * - matrix: The matrix to store the result.
  */
-void frGetCameraMatrix(float matrix[16]);
+void frGetCameraMatrix(const FrCamera* camera, const FrEngine* engine, float matrix[16]);
 
 #endif

@@ -17,6 +17,7 @@
 # Except demo
 !/demo
 !/demo/**
+/demo/assets
 
 # Except tests
 !/tests

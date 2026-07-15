@@ -1,0 +1,8 @@
+#ifndef FR_VERSION_H
+#define FR_VERSION_H
+
+#define FR_VERSION_MAJOR @Fraus_VERSION_MAJOR@
+#define FR_VERSION_MINOR @Fraus_VERSION_MINOR@
+#define FR_VERSION_PATCH @Fraus_VERSION_PATCH@
+
+#endif

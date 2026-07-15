@@ -1,7 +1,5 @@
 #include <float.h>
 #include <math.h>
-#include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,11 +22,11 @@ static FrVec3 lightPosition;
  * Parameters:
  * - key: The key.
  * - state: The key state.
- * - pUserData: Not used.
+ * - userData: Not used.
  */
-void myKeyHandler(FrKey key, FrKeyState state, void* pUserData)
+void myKeyHandler(const FrKey key, const FrKeyState state, void* const windowVoid)
 {
-	(void)pUserData;
+	FrWindow* const window = windowVoid;
 
 	if(state == FR_KEY_STATE_UP)
 	{
@@ -38,11 +36,11 @@ void myKeyHandler(FrKey key, FrKeyState state, void* pUserData)
 	switch(key)
 	{
 		case FR_KEY_ESCAPE:
-			frCloseWindow();
+			frCloseWindow(window);
 			break;
 
 		case FR_KEY_F:
-			frMaximizeWindow();
+			frMaximizeWindow(window);
 			break;
 
 		case FR_KEY_P:
@@ -51,14 +49,14 @@ void myKeyHandler(FrKey key, FrKeyState state, void* pUserData)
 
 		case FR_KEY_M:
 			capture = !capture;
-			frCaptureMouse(capture);
+			frCaptureMouse(window, capture);
 			break;
 
 		case FR_KEY_LEFT_MOUSE:
 			if(!capture)
 			{
 				capture = true;
-				frCaptureMouse(capture);
+				frCaptureMouse(window, capture);
 			}
 			break;
 
@@ -73,19 +71,19 @@ void myKeyHandler(FrKey key, FrKeyState state, void* pUserData)
  * Parameters:
  * - dx: Mouse movement on the X axis.
  * - dy: Mouse movement on the Y axis.
- * - pUserData: Not used.
+ * - userData: Not used.
  */
-void myMouseMoveHandler(int32_t dx, int32_t dy, void* pUserData)
+void myMouseMoveHandler(const int32_t dx, const int32_t dy, void* const cameraVoid)
 {
-	(void)pUserData;
+	FrCamera* const camera = cameraVoid;
 
 	// Update yaw
-	camera.yaw = fmodf(camera.yaw - dx * camera.rotationSpeed * capture, 2.f * PI);
+	camera->yaw = fmodf(camera->yaw - dx * camera->rotationSpeed * capture, 2.f * PI);
 
 	// Update pitch
-	camera.pitch += dy * camera.rotationSpeed * capture;
-	camera.pitch = camera.pitch < 0.001f ? 0.001f : camera.pitch;
-	camera.pitch = camera.pitch > PI - 0.001f ? PI - 0.001f : camera.pitch;
+	camera->pitch += dy * camera->rotationSpeed * capture;
+	camera->pitch = camera->pitch < 0.001f ? 0.001f : camera->pitch;
+	camera->pitch = camera->pitch > PI - 0.001f ? PI - 0.001f : camera->pitch;
 }
 
 // Define number of objects and buffer for lowest Zs
@@ -97,19 +95,11 @@ static float lowestZs[OBJECT_COUNT];
  *
  * Parameters:
  * - elapsed: Elapsed time since last frame in seconds.
+ * - userData: Not used.
  */
-void myUpdateHandler(float elapsed, void* pUserData)
+void myUpdateHandler(const float elapsed, void* const applicationVoid)
 {
-	(void)pUserData;
-
-	if(frGamepad.available)
-	{
-		camera.yaw = fmodf(camera.yaw - frGamepad.rightStickX * elapsed * camera.rotationSpeed * 1000, 2.f * PI);
-
-		camera.pitch -= frGamepad.rightStickY * elapsed * camera.rotationSpeed * 1000;
-		camera.pitch = camera.pitch < 0.001f ? 0.001f : camera.pitch;
-		camera.pitch = camera.pitch > PI - 0.001f ? PI - 0.001f : camera.pitch;
-	}
+	FrApplication* const application = applicationVoid;
 
 	static float time = 0.f;
 	time = fmodf(time + elapsed, 2.f * PI);
@@ -123,41 +113,44 @@ void myUpdateHandler(float elapsed, void* pUserData)
 	const FrVec3 worldUp = {.x = 0.f, .y = 0.f, .z = 1.f};
 
 	// Set model matrix to identity
-	frIdentity(frObjects.data[0].transformation);
-	frTranslation(frObjects.data[1].transformation, 0.f, 0.f, -lowestZs[1]);
-	frTranslation(frObjects.data[2].transformation, -3.f, -3.f, -lowestZs[2]);
-	frTranslation(frObjects.data[3].transformation, 4.f, -5.f, -lowestZs[3]);
+	float scaling[16];
+	frScaling(scaling, 10.f, 10.f, 1.f);
+	float translation[16];
+	frTranslation(translation, -5.f, -5.f, 0.f);
+	frMultiply(scaling, translation, application->engine.objects[0].transformation);
+	frTranslation(application->engine.objects[1].transformation, 0.f, 0.f, -lowestZs[1]);
+	frTranslation(application->engine.objects[2].transformation, -3.f, -3.f, -lowestZs[2]);
+	frTranslation(application->engine.objects[3].transformation, 4.f, -5.f, -lowestZs[3]);
 	float rotation[16];
 	frZRotation(rotation, angle);
-	float translation[16];
 	frTranslation(translation, lightPosition.x, lightPosition.y, lightPosition.z);
-	frMultiply(rotation, translation, frObjects.data[4].transformation);
+	frMultiply(rotation, translation, application->engine.objects[4].transformation);
 
 	float scale[16];
 	frScaling(scale, 0.5f, 1.f, 1.0f);
 	frTranslation(translation, 0.f, 0.f, 5.f);
-	frMultiply(scale, translation, frObjects.data[5].transformation);
+	frMultiply(scale, translation, application->engine.objects[5].transformation);
 
 	// Compute camera's objective
 	const FrVec3 objective = {
-		.x = camera.position.x + cosf(camera.yaw) * sinf(camera.pitch),
-		.y = camera.position.y + sinf(camera.yaw) * sinf(camera.pitch),
-		.z = camera.position.z + cosf(camera.pitch)
+		.x = application->camera.position.x + cosf(application->camera.yaw) * sinf(application->camera.pitch),
+		.y = application->camera.position.y + sinf(application->camera.yaw) * sinf(application->camera.pitch),
+		.z = application->camera.position.z + cosf(application->camera.pitch)
 	};
 
 	// Set camera speed
-	camera.translationSpeed = 3.f;
-	if(frGetKeyState(FR_KEY_LEFT_MOUSE) == FR_KEY_STATE_DOWN || (frGamepad.available && frGamepad.leftTrigger > 0.5f))
+	application->camera.translationSpeed = 3.f;
+	if(frGetKeyState(FR_KEY_LEFT_MOUSE) == FR_KEY_STATE_DOWN)
 	{
-		camera.translationSpeed = 0.5f;
+		application->camera.translationSpeed = 0.5f;
 	}
-	else if(frGetKeyState(FR_KEY_RIGHT_MOUSE) == FR_KEY_STATE_DOWN || (frGamepad.available && frGamepad.rightTrigger > 0.5f))
+	else if(frGetKeyState(FR_KEY_RIGHT_MOUSE) == FR_KEY_STATE_DOWN)
 	{
-		camera.translationSpeed = 10.f;
+		application->camera.translationSpeed = 10.f;
 	}
 
 	// Compute movement vectors
-	FrVec3 movForward = frSubstract(&objective, &camera.position);
+	FrVec3 movForward = frSubstract(&objective, &application->camera.position);
 	if(!sameForward)
 	{
 		movForward.z = 0.f;
@@ -173,64 +166,54 @@ void myUpdateHandler(float elapsed, void* pUserData)
 	// Move camera
 	if(frGetKeyState(FR_KEY_Z) == FR_KEY_STATE_DOWN || frGetKeyState(FR_KEY_UP) == FR_KEY_STATE_DOWN)
 	{
-		const FrVec3 movement = frScale(&movForward, elapsed * camera.translationSpeed);
-		camera.position = frAdd(&camera.position, &movement);
+		const FrVec3 movement = frScale(&movForward, elapsed * application->camera.translationSpeed);
+		application->camera.position = frAdd(&application->camera.position, &movement);
 	}
 
 	if(frGetKeyState(FR_KEY_S) == FR_KEY_STATE_DOWN || frGetKeyState(FR_KEY_DOWN) == FR_KEY_STATE_DOWN)
 	{
-		const FrVec3 movement = frScale(&movForward, -elapsed * camera.translationSpeed);
-		camera.position = frAdd(&camera.position, &movement);
+		const FrVec3 movement = frScale(&movForward, -elapsed * application->camera.translationSpeed);
+		application->camera.position = frAdd(&application->camera.position, &movement);
 	}
 
 	if(frGetKeyState(FR_KEY_Q) == FR_KEY_STATE_DOWN || frGetKeyState(FR_KEY_LEFT) == FR_KEY_STATE_DOWN)
 	{
-		const FrVec3 movement = frScale(&movRight, -elapsed * camera.translationSpeed);
-		camera.position = frAdd(&camera.position, &movement);
+		const FrVec3 movement = frScale(&movRight, -elapsed * application->camera.translationSpeed);
+		application->camera.position = frAdd(&application->camera.position, &movement);
 	}
 
 	if(frGetKeyState(FR_KEY_D) == FR_KEY_STATE_DOWN || frGetKeyState(FR_KEY_RIGHT) == FR_KEY_STATE_DOWN)
 	{
-		const FrVec3 movement = frScale(&movRight, elapsed * camera.translationSpeed);
-		camera.position = frAdd(&camera.position, &movement);
+		const FrVec3 movement = frScale(&movRight, elapsed * application->camera.translationSpeed);
+		application->camera.position = frAdd(&application->camera.position, &movement);
 	}
 
 	if(frGetKeyState(FR_KEY_SPACE) == FR_KEY_STATE_DOWN)
 	{
-		const FrVec3 movement = frScale(&movUp, elapsed * camera.translationSpeed);
-		camera.position = frAdd(&camera.position, &movement);
+		const FrVec3 movement = frScale(&movUp, elapsed * application->camera.translationSpeed);
+		application->camera.position = frAdd(&application->camera.position, &movement);
 	}
 
 	if(frGetKeyState(FR_KEY_LEFT_CONTROL) == FR_KEY_STATE_DOWN)
 	{
-		const FrVec3 movement = frScale(&movUp, -elapsed * camera.translationSpeed);
-		camera.position = frAdd(&camera.position, &movement);
+		const FrVec3 movement = frScale(&movUp, -elapsed * application->camera.translationSpeed);
+		application->camera.position = frAdd(&application->camera.position, &movement);
 	}
 
-	if(frGamepad.available)
-	{
-		const FrVec3 movementForward = frScale(&movForward, frGamepad.leftStickY * elapsed * camera.translationSpeed);
-		const FrVec3 movementRight = frScale(&movRight, frGamepad.leftStickX * elapsed * camera.translationSpeed);
-		const FrVec3 movementUp = frScale(&movUp, elapsed * camera.translationSpeed * frGamepad.buttonDown);
-		const FrVec3 movementDown = frScale(&movUp, -elapsed * camera.translationSpeed * frGamepad.buttonRight);
-		FrVec3 movement = frAdd(&movementForward, &movementRight);
-		movement = frAdd(&movement, &movementUp);
-		movement = frAdd(&movement, &movementDown);
+	memcpy(application->engine.uniformBuffers[application->engine.uniformBufferCount - 2].bufferDatas[application->engine.frameInFlightIndex], &lightPosition, sizeof(lightPosition));
 
-		camera.position = frAdd(&camera.position, &movement);
-	}
-
-	memcpy(uniformBuffers.data[1].bufferDatas[frameInFlightIndex], &lightPosition, sizeof(lightPosition));
+	const float extent[2] = {application->engine.swapchainExtent.width, application->engine.swapchainExtent.height};
+	memcpy(application->engine.uniformBuffers[application->engine.uniformBufferCount - 1].bufferDatas[application->engine.frameInFlightIndex], extent, sizeof(extent));
 }
 
-#define TRUC 10.f
-float widthToVk(float size)
+#define TEXT_SCALING 10.f
+float widthToVk(FrEngine* const engine, const float size)
 {
-	return size / swapchainExtent.width * 2.f / TRUC;
+	return size / engine->swapchainExtent.width * 2.f / TEXT_SCALING;
 }
-float heightToVk(float size)
+float heightToVk(FrEngine* const engine, const float size)
 {
-	return size / swapchainExtent.height * 2.f / TRUC;
+	return size / engine->swapchainExtent.height * 2.f / TEXT_SCALING;
 }
 
 /*
@@ -239,46 +222,89 @@ float heightToVk(float size)
  */
 int main(void)
 {
+	if(frInitialize() != FR_SUCCESS)
+	{
+		return EXIT_FAILURE;
+	}
+
 	lightPosition.z = 4.f;
 
-	// Create application
-	if(frCreateApplication("My super Fraus application", 1)!= FR_SUCCESS)
+	// Create application.
+	FrApplication application;
+	if(frCreateApplication(&application, "My super Fraus application", 1) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
 
 	// Add input handlers
-	frSetKeyHandler(myKeyHandler, NULL);
-	frSetMouseMoveHandler(myMouseMoveHandler, NULL);
-	frSetUpdateHandler(myUpdateHandler, NULL);
+	frSetKeyHandler(&application, myKeyHandler, &application.window);
+	frSetMouseMoveHandler(&application, myMouseMoveHandler, &application.camera);
+	frSetUpdateHandler(&application, myUpdateHandler, &application);
 
 	// Capture mouse
-	frCaptureMouse(capture);
+	frCaptureMouse(&application.window, capture);
 
 	// Initialize camera
-	camera.position = (FrVec3){.x = 2.f, .y = 2.f, .z = 2.f};
-	camera.yaw = 225.f * PI / 180.f;
-	camera.pitch = 2.f * PI / 3.f;
+	application.camera.position = (FrVec3){.x = 2.f, .y = 2.f, .z = 2.f};
+	application.camera.yaw = 225.f * PI / 180.f;
+	application.camera.pitch = 2.f * PI / 3.f;
 
-	// Create pipelines
-	FrPipelineCreateInfo pipelineInfo = {
-		.vertexShaderPath = "shader_vert.spv",
-		.fragmentShaderPath = "shader_frag.spv"
-	};
-	if(frCreateGraphicsPipeline(&pipelineInfo) != FR_SUCCESS)
+	if(frReserveGraphicsPipelines(&application.engine, 4) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
 
+	if(frReserveUniformBuffers(&application.engine, 3) != FR_SUCCESS)
+	{
+		return EXIT_FAILURE;
+	}
+	const uint32_t cameraBuffer = 0;
+
+	if(frReserveStorageBuffers(&application.engine, 3) != FR_SUCCESS)
+	{
+		return EXIT_FAILURE;
+	}
+
+	if(frReserveTextures(&application.engine, 5) != FR_SUCCESS)
+	{
+		return EXIT_FAILURE;
+	}
+
+	if(frReserveObjects(&application.engine, 6) != FR_SUCCESS)
+	{
+		return EXIT_FAILURE;
+	}
+
+	// Create pipelines
+	const uint32_t shaderPipeline = application.engine.graphicsPipelineCount;
+	FrPipelineCreateInfo pipelineInfo = {
+		.vertexShaderPath = "shader_vert.spv",
+		.fragmentShaderPath = "shader_frag.spv"
+	};
+	if(frCreateGraphicsPipeline(&application.engine, &pipelineInfo) != FR_SUCCESS)
+	{
+		return EXIT_FAILURE;
+	}
+
+	const uint32_t phongPipeline = application.engine.graphicsPipelineCount;
 	pipelineInfo.vertexShaderPath = "phong_vert.spv";
 	pipelineInfo.fragmentShaderPath = "phong_frag.spv";
-	if(frCreateGraphicsPipeline(&pipelineInfo) != FR_SUCCESS)
+	if(frCreateGraphicsPipeline(&application.engine, &pipelineInfo) != FR_SUCCESS)
+	{
+		return EXIT_FAILURE;
+	}
+
+	const uint32_t repeatPipeline = application.engine.graphicsPipelineCount;
+	pipelineInfo.vertexShaderPath = "repeat_vert.spv";
+	pipelineInfo.fragmentShaderPath = "repeat_frag.spv";
+	if(frCreateGraphicsPipeline(&application.engine, &pipelineInfo) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
 
 	// Create lightPosition uniform buffer
-	if(frCreateUniformBuffer(sizeof(lightPosition)) != FR_SUCCESS)
+	const uint32_t lightBuffer = application.engine.uniformBufferCount;
+	if(frCreateUniformBuffer(&application.engine, sizeof(lightPosition)) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
@@ -298,37 +324,42 @@ int main(void)
 			return EXIT_FAILURE;
 		}
 
-		if(frCreateTexture(textureFileName) != FR_SUCCESS) return EXIT_FAILURE;
+		if(frCreateTexture(&application.engine, textureFileName) != VK_SUCCESS)
+		{
+			return EXIT_FAILURE;
+		}
 		if(frCreateObject(
+			&application.engine,
 			modelFileName,
-			objectIndex == 2 ? 1 : 0,
-			objectIndex == 2 ? (uint32_t[]){0, objectIndex, 1} : (uint32_t[]){0, objectIndex}
+			objectIndex == 0 ? repeatPipeline : (objectIndex == 2 ? phongPipeline : shaderPipeline),
+			objectIndex == 2 ? (uint32_t[]){cameraBuffer, objectIndex, lightBuffer} : (uint32_t[]){cameraBuffer, objectIndex}
 		) != FR_SUCCESS)
 		{
 			return EXIT_FAILURE;
 		}
 
 		lowestZs[objectIndex] = FLT_MAX;
-		for(uint32_t vertexIndex = 0; vertexIndex < frObjects.data[objectIndex].vertexCount; ++vertexIndex)
+		for(uint32_t vertexIndex = 0; vertexIndex < application.engine.objects[objectIndex].vertexCount; ++vertexIndex)
 		{
-			if(frObjects.data[objectIndex].vertices[vertexIndex].position.z < lowestZs[objectIndex])
+			if(application.engine.objects[objectIndex].vertices[vertexIndex].position.z < lowestZs[objectIndex])
 			{
-				lowestZs[objectIndex] = frObjects.data[objectIndex].vertices[vertexIndex].position.z;
+				lowestZs[objectIndex] = application.engine.objects[objectIndex].vertices[vertexIndex].position.z;
 			}
 		}
 	}
 
 	// Text test
+	const uint32_t textPipeline = application.engine.graphicsPipelineCount;
 	pipelineInfo.vertexShaderPath = "text_vert.spv";
 	pipelineInfo.fragmentShaderPath = "text_frag.spv";
 	const VkVertexInputRate vertexInputRates[] = {VK_VERTEX_INPUT_RATE_VERTEX, VK_VERTEX_INPUT_RATE_INSTANCE};
-	const uint32_t vertexInputStrides[] = {8, 20};
+	const uint32_t vertexInputStrides[] = {sizeof(FrVertex), 20};
 	pipelineInfo.vertexInputRateCount = FR_LEN(vertexInputRates);
 	pipelineInfo.vertexInputRates = vertexInputRates;
 	pipelineInfo.vertexInputStrides = vertexInputStrides;
 	pipelineInfo.depthTestDisable = true;
 	pipelineInfo.alphaBlendEnable = true;
-	if(frCreateGraphicsPipeline(&pipelineInfo) != FR_SUCCESS)
+	if(frCreateGraphicsPipeline(&application.engine, &pipelineInfo) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
@@ -341,52 +372,49 @@ int main(void)
 	}
 
 	const size_t contourInfoSize = font.contourInfoCount * sizeof(font.contourInfos[0]);
-	if(frCreateStorageBuffer(contourInfoSize) != FR_SUCCESS)
+	if(frCreateStorageBuffer(&application.engine, contourInfoSize) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
-	if(frSetStorageBufferData(0, font.contourInfos, contourInfoSize) != FR_SUCCESS)
+	if(frSetStorageBufferData(&application.engine, 0, font.contourInfos, contourInfoSize) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
 
 	const size_t offsetsSize = font.glyphCount * sizeof(font.glyphOffsets[0]) * 2;
-	if(frCreateStorageBuffer(offsetsSize) != FR_SUCCESS)
+	if(frCreateStorageBuffer(&application.engine, offsetsSize) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
-	if(frSetStorageBufferData(1, font.glyphOffsets, offsetsSize) != FR_SUCCESS)
+	if(frSetStorageBufferData(&application.engine, 1, font.glyphOffsets, offsetsSize) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
 
 	const size_t pointsSize = font.pointCount * sizeof(font.points[0]) * 2;
-	if(frCreateStorageBuffer(pointsSize) != FR_SUCCESS)
+	if(frCreateStorageBuffer(&application.engine, pointsSize) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
-	if(frSetStorageBufferData(2, font.points, pointsSize) != FR_SUCCESS)
+	if(frSetStorageBufferData(&application.engine, 2, font.points, pointsSize) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
 
-	if(frCreateObject("assets/model_0.obj", 2, (uint32_t[]){1, 0, 2}) != FR_SUCCESS)
+	if(frCreateUniformBuffer(&application.engine, 8) != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
+
+	if(frCreateObject(&application.engine, "assets/model_0.obj", textPipeline, (uint32_t[]){1, 0, 2, 2}) != FR_SUCCESS)
+	{
+		return EXIT_FAILURE;
+	}
+
+	FrVulkanObject* const textObject = &application.engine.objects[application.engine.objectCount - 1];
 
 	const char text[] = "Hélloij, ç*¤£$µù%!";
 	const size_t textLength = FR_LEN(text) - 1;
-	const FrVec2 textQuadPoints[] = {
-		{0.f, 0.f},
-		{1.f, 0.f},
-		{1.f, 1.f},
-		{0.f, 1.f}
-	};
-	const uint16_t textQuadIndices[] = {
-		0, 1, 2,
-		2, 3, 0
-	};
 
 	uint32_t glyphCount = 0;
 	uint32_t glyphIds[FR_LEN(text) - 1];
@@ -411,15 +439,15 @@ int main(void)
 		++glyphCount;
 	}
 
-	float* const truc = malloc(glyphCount * 4 * sizeof(truc[0]));
-	if(!truc)
+	const FrArenaSave save = frArenaSave(&application.arena);
+	float* const textTransforms = frArenaAllocate(&application.arena, glyphCount * 4 * sizeof(textTransforms[0]), alignof(typeof(textTransforms[0])));
+	if(!textTransforms)
 	{
 		return EXIT_FAILURE;
 	}
-	uint32_t* const truc2 = malloc(glyphCount * sizeof(truc2[0]));
-	if(!truc2)
+	uint32_t* const textGlyphIds = frArenaAllocate(&application.arena, glyphCount * sizeof(textGlyphIds[0]), alignof(typeof(textGlyphIds[0])));
+	if(!textGlyphIds)
 	{
-		free(truc);
 		return EXIT_FAILURE;
 	}
 	float xOffset = -1.f;
@@ -430,50 +458,46 @@ int main(void)
 		const int16_t height = font.glyphPositions[glyphIds[i]].yMax - font.glyphPositions[glyphIds[i]].yMin;
 		if(width != 0 && height != 0)
 		{
-			truc[j * 4] = xOffset + widthToVk(font.glyphPositions[glyphIds[i]].leftSideBearing);
-			truc[j * 4 + 1] = -heightToVk(font.glyphPositions[glyphIds[i]].yMin) - heightToVk(height);
-			truc[j * 4 + 2] = widthToVk(width);
-			truc[j * 4 + 3] = heightToVk(height);
-			truc2[j] = glyphIds[i];
+			textTransforms[j * 4] = xOffset + widthToVk(&application.engine, font.glyphPositions[glyphIds[i]].leftSideBearing);
+			textTransforms[j * 4 + 1] = -heightToVk(&application.engine, font.glyphPositions[glyphIds[i]].yMin) - heightToVk(&application.engine, height);
+			textTransforms[j * 4 + 2] = widthToVk(&application.engine, width);
+			textTransforms[j * 4 + 3] = heightToVk(&application.engine, height);
+			textGlyphIds[j] = glyphIds[i];
 			++j;
 		}
-		xOffset += widthToVk(font.glyphPositions[glyphIds[i]].advanceWidth);
+		xOffset += widthToVk(&application.engine, font.glyphPositions[glyphIds[i]].advanceWidth);
 	};
-	instanceCount = j;
-	const VkDeviceSize s = sizeof(textQuadPoints) + sizeof(textQuadIndices) + (instanceCount * 4 * sizeof(truc[0])) + (instanceCount * truc2[0]);
-	if(frCreateBuffer(s, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &instanceBuffer, &instanceBufferMemory) != FR_SUCCESS)
+	textObject->instanceCount = j;
+	const VkDeviceSize s = textObject->instanceCount * 4 * sizeof(textTransforms[0]) + textObject->instanceCount * textGlyphIds[0];
+	if(frCreateBuffer(&application.engine, s, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &textObject->instanceBuffer, &textObject->instanceBufferMemory) != VK_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
 	void* data;
-	if(vkMapMemory(device, instanceBufferMemory, 0, s, 0, &data) != VK_SUCCESS)
+	if(application.engine.vkMapMemory(application.engine.device, textObject->instanceBufferMemory, 0, s, 0, &data) != VK_SUCCESS)
 	{
 		return FR_ERROR_UNKNOWN;
 	}
 	char* trucData = (char*)data;
-	memcpy(trucData, textQuadPoints, sizeof(textQuadPoints));
-	trucData += sizeof(textQuadPoints);
-	memcpy(trucData, textQuadIndices, sizeof(textQuadIndices));
-	trucData += sizeof(textQuadIndices);
-	for(uint32_t i = 0; i < instanceCount; ++i)
+	for(uint32_t i = 0; i < application.engine.objects[application.engine.objectCount - 1].instanceCount; ++i)
 	{
-		memcpy(trucData, truc + 4 * i, sizeof(truc[0]) * 4);
-		trucData += sizeof(truc[0]) * 4;
-		memcpy(trucData, truc2 + i, sizeof(truc2[0]));
-		trucData += sizeof(truc2[0]);
+		memcpy(trucData, textTransforms + 4 * i, sizeof(textTransforms[0]) * 4);
+		trucData += sizeof(textTransforms[0]) * 4;
+		memcpy(trucData, textGlyphIds + i, sizeof(textGlyphIds[0]));
+		trucData += sizeof(textGlyphIds[0]);
 	}
-	vkUnmapMemory(device, instanceBufferMemory);
-	free(truc);
-	free(truc2);
+	application.engine.vkUnmapMemory(application.engine.device, textObject->instanceBufferMemory);
+	frArenaRestore(&application.arena, save);
 
-	if(frFreeFont(&font) != FR_SUCCESS)
+	frFreeFont(&font);
+
+	// Main loop
+	const int exitValue = frRunApplication(&application);
+
+	if(frFinish() != FR_SUCCESS)
 	{
 		return EXIT_FAILURE;
 	}
 
-	// Main loop
-	const int exitValue = frRunApplication();
-
-	printf("Exiting with exit value %d\n", exitValue);
 	return exitValue;
 }

@@ -10,7 +10,7 @@ typedef struct FrMapNode
 {
 	FrVertex key;
 	uint32_t value;
-	struct FrMapNode* pNext;
+	struct FrMapNode* next;
 } FrMapNode;
 
 typedef struct FrMap
@@ -19,8 +19,8 @@ typedef struct FrMap
 	uint32_t size;
 } FrMap;
 
-FrResult frCreateMap(uint32_t size, FrMap* pMap);
-FrResult frGetOrInsertMap(FrMap* pMap, const FrVertex* pKey, uint32_t newValue, uint32_t* pValue);
-void frDestroyMap(FrMap* pMap);
+FrResult frCreateMap(uint32_t size, FrMap* map);
+FrResult frGetOrInsertMap(FrMap* map, const FrVertex* key, uint32_t newValue, uint32_t* value);
+void frDestroyMap(FrMap* map);
 
 #endif

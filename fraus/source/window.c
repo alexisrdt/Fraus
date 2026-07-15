@@ -3,18 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
-HWND windowHandle;
-HINSTANCE windowInstance;
-#else
-Display* display;
-Window window;
-#endif
-bool windowResized;
-bool windowCaptured;
-FrEventHandlers eventHandlers;
+#include "fraus/fraus.h"
 
-#ifdef _WIN32
+HINSTANCE windowInstance;
+
 /*
  * Win32 window procedure
  * - handle: the handle of the window that received a message
@@ -22,12 +14,14 @@ FrEventHandlers eventHandlers;
  * - wParam: the WPARAM of the message
  * - lParam: the LPARAM of the message
  */
-static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPARAM lParam)
+static LRESULT CALLBACK WindowProc(const HWND window, const UINT message, const WPARAM wParam, const LPARAM lParam)
 {
+	FrApplication* const application = (void*)GetWindowLongPtr(window, GWLP_USERDATA);
+
 	switch(message)
 	{
 		case WM_INPUT:
-			if(eventHandlers.mouseMoveHandler)
+			if(application->mouseMoveHandler)
 			{
 				RAWINPUT input;
 				UINT size = sizeof(input);
@@ -41,24 +35,24 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 
 				if(input.header.dwType == RIM_TYPEMOUSE && input.data.mouse.usFlags == MOUSE_MOVE_RELATIVE)
 				{
-					eventHandlers.mouseMoveHandler(
+					application->mouseMoveHandler(
 						input.data.mouse.lLastX,
 						input.data.mouse.lLastY,
-						eventHandlers.pMouseMoveHandlerUserData
+						application->mouseMoveHandlerUserData
 					);
 				}
 
 				// Cleanup
 				if(GET_RAWINPUT_CODE_WPARAM(wParam) == RIM_INPUT)
 				{
-					DefWindowProc(handle, message, lParam, wParam);
+					DefWindowProc(window, message, lParam, wParam);
 				}
 
 				// Center cursor
-				if(windowCaptured)
+				if(application->window.captured)
 				{
 					RECT windowRect;
-					GetWindowRect(handle, &windowRect);
+					GetWindowRect(window, &windowRect);
 
 					SetCursorPos(
 						windowRect.left + (windowRect.right - windowRect.left) / 2,
@@ -69,73 +63,51 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 			break;
 
 		case WM_LBUTTONDOWN:
-			if(eventHandlers.keyHandler)
-			{
-				eventHandlers.keyHandler(FR_KEY_LEFT_MOUSE, FR_KEY_STATE_DOWN, eventHandlers.pKeyHandlerUserData);
-			}
-			break;
-
 		case WM_LBUTTONUP:
-			if(eventHandlers.keyHandler)
-			{
-				eventHandlers.keyHandler(FR_KEY_LEFT_MOUSE, FR_KEY_STATE_UP, eventHandlers.pKeyHandlerUserData);
-			}
-			break;
-
 		case WM_RBUTTONDOWN:
-			if(eventHandlers.keyHandler)
-			{
-				eventHandlers.keyHandler(FR_KEY_RIGHT_MOUSE, FR_KEY_STATE_DOWN, eventHandlers.pKeyHandlerUserData);
-			}
-			break;
-
 		case WM_RBUTTONUP:
-			if(eventHandlers.keyHandler)
+			if(application->keyHandler)
 			{
-				eventHandlers.keyHandler(FR_KEY_RIGHT_MOUSE, FR_KEY_STATE_UP, eventHandlers.pKeyHandlerUserData);
+				const bool isLeft = message == WM_LBUTTONDOWN || message == WM_LBUTTONUP;
+				const bool isDown = message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN;
+
+				application->keyHandler(isLeft ? FR_KEY_LEFT_MOUSE : FR_KEY_RIGHT_MOUSE, isDown ? FR_KEY_STATE_DOWN : FR_KEY_STATE_UP, application->keyHandlerUserData);
 			}
 			break;
 
 		case WM_KEYDOWN:
-			if(eventHandlers.keyHandler)
+			if(application->keyHandler)
 			{
-				eventHandlers.keyHandler(wParam, FR_KEY_STATE_DOWN, eventHandlers.pKeyHandlerUserData);
-			}
-			break;
-
-		case WM_KEYUP:
-			if(eventHandlers.keyHandler)
-			{
-				eventHandlers.keyHandler(wParam, FR_KEY_STATE_UP, eventHandlers.pKeyHandlerUserData);
+				application->keyHandler(wParam, message == WM_KEYDOWN ? FR_KEY_STATE_DOWN : FR_KEY_STATE_UP, application->keyHandlerUserData);
 			}
 			break;
 
 		case WM_SIZE:
-		{
-			windowResized = true;
-
-			// Get window rect and set cursor position
-			if(windowCaptured)
+			if(application)
 			{
-				RECT windowRect;
-				GetWindowRect(handle, &windowRect);
+				application->window.resized = true;
 
-				SetCursorPos(
-					windowRect.left + (windowRect.right - windowRect.left) / 2,
-					windowRect.top + (windowRect.bottom - windowRect.top) / 2
-				);
+				// Get window rect and set cursor position
+				if(application->window.captured)
+				{
+					RECT windowRect;
+					GetWindowRect(window, &windowRect);
+
+					SetCursorPos(
+						windowRect.left + (windowRect.right - windowRect.left) / 2,
+						windowRect.top + (windowRect.bottom - windowRect.top) / 2
+					);
+				}
+
+				if(application->resizeHandler)
+				{
+					application->resizeHandler(LOWORD(lParam), HIWORD(lParam), application->resizeHandlerUserData);
+				}
 			}
-
-			if(eventHandlers.resizeHandler)
-			{
-				eventHandlers.resizeHandler(LOWORD(lParam), HIWORD(lParam), eventHandlers.pResizeHandlerUserData);
-			}
-
 			break;
-		}
 
 		case WM_CLOSE:
-			DestroyWindow(handle);
+			DestroyWindow(window);
 			break;
 
 		case WM_DESTROY:
@@ -143,54 +115,52 @@ static LRESULT CALLBACK WindowProc(HWND handle, UINT message, WPARAM wParam, LPA
 			break;
 
 		default:
-			return DefWindowProc(handle, message, wParam, lParam);
+			return DefWindowProc(window, message, wParam, lParam);
 	}
 
 	return 0;
 }
-#endif
+
+static ATOM windowClass;
+
+FrResult frInitializeWindow(void)
+{
+	const WNDCLASSEX windowClassInfo = {
+		.cbSize = sizeof(windowClassInfo),
+		.style = CS_HREDRAW | CS_VREDRAW,
+		.lpfnWndProc = WindowProc,
+		.hInstance = windowInstance,
+		.hCursor = LoadCursor(nullptr, IDC_ARROW),
+		.hbrBackground = GetStockObject(BLACK_BRUSH),
+		.lpszClassName = TEXT("FrWindow"),
+	};
+	windowClass = RegisterClassEx(&windowClassInfo);
+	if(!windowClass)
+	{
+		return FR_ERROR_UNKNOWN;
+	}
+
+	return FR_SUCCESS;
+}
 
 /*
  * Create a window
- * - pTitle: the title of the window
- * - pWindow: pointer to a handle for the window
+ * - title: the title of the window
  */
-FrResult frCreateWindow(const char* title)
+FrResult frCreateWindow(FrApplication* const application, FrWindow* const window, const char* const title)
 {
-	windowResized = false;
-	windowCaptured = false;
-	memset(&eventHandlers, 0, sizeof(eventHandlers));
-
-#ifdef _WIN32
-	windowInstance = GetModuleHandle(NULL);
-	if(!windowInstance)
-	{
-		return FR_ERROR_UNKNOWN;
-	}
-
-	const WNDCLASSEX windowClass = {
-		.cbSize = sizeof(windowClass),
-		.lpfnWndProc = WindowProc,
-		.hInstance = windowInstance,
-		.hIcon = LoadIcon(NULL, IDI_APPLICATION),
-		.hCursor = LoadCursor(NULL, IDC_ARROW),
-		.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1),
-		.lpszClassName = TEXT("FrWindow"),
-		.hIconSm = LoadIcon(NULL, IDI_APPLICATION)
-	};
-	if(!RegisterClassEx(&windowClass))
-	{
-		return FR_ERROR_UNKNOWN;
-	}
+	window->resized = false;
+	window->captured = false;
 
 #if defined(UNICODE) || defined(_UNICODE)
-	const int wideTitleSize = MultiByteToWideChar(CP_UTF8, 0, title, -1, NULL, 0);
+	const int wideTitleSize = MultiByteToWideChar(CP_UTF8, 0, title, -1, nullptr, 0);
 	if(!wideTitleSize)
 	{
 		return FR_ERROR_UNKNOWN;
 	}
 
-	WCHAR* const wideTitle = malloc(wideTitleSize * sizeof(wideTitle[0]));
+	const FrArenaSave save = frArenaSave(&application->arena);
+	WCHAR* const wideTitle = frArenaAllocate(&application->arena, wideTitleSize * sizeof(wideTitle[0]), alignof(typeof(wideTitle[0])));
 	if(!wideTitle)
 	{
 		return FR_ERROR_OUT_OF_HOST_MEMORY;
@@ -203,9 +173,9 @@ FrResult frCreateWindow(const char* title)
 	}
 #endif
 
-	windowHandle = CreateWindowEx(
-		WS_EX_OVERLAPPEDWINDOW,
-		TEXT("FrWindow"),
+	window->window = CreateWindowEx(
+		0,
+		MAKEINTATOM(windowClass),
 	#if defined(UNICODE) || defined(_UNICODE)
 		wideTitle,
 	#else
@@ -216,108 +186,67 @@ FrResult frCreateWindow(const char* title)
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
-		NULL,
-		NULL,
+		nullptr,
+		nullptr,
 		windowInstance,
-		NULL
+		nullptr
 	);
 #if defined(UNICODE) || defined(_UNICODE)
-	free(wideTitle);
+	frArenaRestore(&application->arena, save);
 #endif
-	if(!windowHandle)
+	if(!window->window)
 	{
 		return FR_ERROR_UNKNOWN;
 	}
 
 	// Show window
-	ShowWindow(windowHandle, SW_SHOW);
+	ShowWindow(window->window, SW_SHOW);
+
+	SetWindowLongPtr(window->window, GWLP_USERDATA, (LONG_PTR)(void*)application);
 
 	// Register devices
 	const RAWINPUTDEVICE mouseDevice = {
 		.usUsagePage = 1,
 		.usUsage = 2,
-		.hwndTarget = windowHandle
+		.hwndTarget = window->window
 	};
 	if(RegisterRawInputDevices(&mouseDevice, 1, sizeof(mouseDevice)) != TRUE)
 	{
 		return FR_ERROR_UNKNOWN;
 	}
-#else
-	// Open display
-	display = XOpenDisplay(NULL);
-	if(!display)
-	{
-		return FR_ERROR_UNKNOWN;
-	}
-
-	// Create window
-	int screen = DefaultScreen(display);
-	window = XCreateSimpleWindow(
-		display,
-		RootWindow(display, screen),
-		0, 0,
-		640, 360,
-		0,
-		BlackPixel(display, screen),
-		WhitePixel(display, screen)
-	);
-	XStoreName(display, window, pTitle);
-	XSelectInput(display, window, KeyReleaseMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | StructureNotifyMask);
-
-	// Show window
-	XMapWindow(display, window);
-#endif
 
 	return FR_SUCCESS;
 }
 
 /*
  * Destroy a window
- * - pWindow: pointer to the window
  */
-void frDestroyWindow(void)
+void frDestroyWindow(FrWindow* const window)
 {
-#ifdef _WIN32
-	DestroyWindow(windowHandle);
-#else
-	XDestroyWindow(pWindow->display, pWindow->window);
-	XCloseDisplay(pWindow->display);
-#endif
+	DestroyWindow(window->window);
 }
 
-void frCloseWindow(void)
+void frCloseWindow(FrWindow* const window)
 {
-#ifdef _WIN32
-	PostMessage(windowHandle, WM_CLOSE, 0, 0);
-#else
-	XEvent event;
-	event.type = ClientMessage;
-	event.xclient.window = pWindow->window;
-	event.xclient.message_type = XInternAtom(pWindow->display, "WM_PROTOCOLS", False);
-	event.xclient.format = 32;
-	event.xclient.data.l[0] = XInternAtom(pWindow->display, "WM_DELETE_WINDOW", False);
-	event.xclient.data.l[1] = CurrentTime;
-	XSendEvent(pWindow->display, pWindow->window, False, NoEventMask, &event);
-#endif
+	PostMessage(window->window, WM_CLOSE, 0, 0);
 }
 
-void frMaximizeWindow(void)
+void frMaximizeWindow(FrWindow* const window)
 {
 	WINDOWPLACEMENT windowPlacement;
-	GetWindowPlacement(windowHandle, &windowPlacement);
+	GetWindowPlacement(window->window, &windowPlacement);
 
-	ShowWindow(windowHandle, windowPlacement.showCmd == SW_MAXIMIZE ? SW_RESTORE : SW_MAXIMIZE);
+	ShowWindow(window->window, windowPlacement.showCmd == SW_MAXIMIZE ? SW_RESTORE : SW_MAXIMIZE);
 }
 
-void frCaptureMouse(bool capture)
+void frCaptureMouse(FrWindow* const window, const bool capture)
 {
-	windowCaptured = capture;
+	window->captured = capture;
 
-#ifdef _WIN32
 	if(capture)
 	{
 		RECT windowRect;
-		GetWindowRect(windowHandle, &windowRect);
+		GetWindowRect(window->window, &windowRect);
 
 		SetCursorPos(
 			windowRect.left + (windowRect.right - windowRect.left) / 2,
@@ -326,49 +255,13 @@ void frCaptureMouse(bool capture)
 	}
 
 	ShowCursor(!capture);
-#else
-	if(capture)
-	{
-		XWindowAttributes attributes;
-		XGetWindowAttributes(pWindow->display, pWindow->window, &attributes);
-
-		XWarpPointer(pWindow->display, None, pWindow->window, 0, 0, 0, 0, attributes.width / 2, attributes.height / 2);
-	}
-#endif
 }
 
 /*
  * Get the state of a key
  * - key: the key
  */
-FrKeyState frGetKeyState(FrKey key)
+FrKeyState frGetKeyState(const FrKey key)
 {
-#ifdef _WIN32
 	return GetKeyState(key) >= 0 ? FR_KEY_STATE_UP : FR_KEY_STATE_DOWN;
-#else
-	char keyboardState[32];
-	XQueryKeymap(display, keyboardState);
-
-	return keyboardState[key >> 3] & (1 << (key & 7));
-#endif
-}
-
-/* Handlers */
-
-void frSetMouseMoveHandler(FrMouseMoveHandler handler, void* pUserData)
-{
-	eventHandlers.mouseMoveHandler = handler;
-	eventHandlers.pMouseMoveHandlerUserData = pUserData;
-}
-
-void frSetKeyHandler(FrKeyHandler handler, void* pUserData)
-{
-	eventHandlers.keyHandler = handler;
-	eventHandlers.pKeyHandlerUserData = pUserData;
-}
-
-void frSetResizeHandler(FrResizeHandler handler, void* pUserData)
-{
-	eventHandlers.resizeHandler = handler;
-	eventHandlers.pResizeHandlerUserData = pUserData;
 }

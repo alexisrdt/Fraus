@@ -37,15 +37,15 @@ typedef struct FrFileReader
 	uint8_t buffer[4];
 } FrFileReader;
 
-FrResult frReadInt8(FrFileReader* pReader, int8_t* pValue);
-FrResult frReadUint8(FrFileReader* pReader, uint8_t* pValue);
-FrResult frReadUint16(FrFileReader* pReader, uint16_t* pValue);
-FrResult frReadInt16(FrFileReader* pReader, int16_t* pValue);
-FrResult frReadUint32(FrFileReader* pReader, uint32_t* pValue);
-FrResult frReadF2d14(FrFileReader* pReader, float* pValue);
+FrResult frReadInt8(FrFileReader* reader, int8_t* value);
+FrResult frReadUint8(FrFileReader* reader, uint8_t* value);
+FrResult frReadUint16(FrFileReader* reader, uint16_t* value);
+FrResult frReadInt16(FrFileReader* reader, int16_t* value);
+FrResult frReadUint32(FrFileReader* reader, uint32_t* value);
+FrResult frReadF2d14(FrFileReader* reader, float* value);
 
-FrResult frSkipBytes(FrFileReader* pReader, long bytes);
+FrResult frSkipBytes(FrFileReader* reader, long bytes);
 
-FrResult frMoveTo(FrFileReader* pReader, long offset);
+FrResult frMoveTo(FrFileReader* reader, long offset);
 
 #endif

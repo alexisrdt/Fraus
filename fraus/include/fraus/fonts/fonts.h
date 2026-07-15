@@ -63,9 +63,9 @@ typedef struct FrFont
 	FrVec2* points;
 } FrFont;
 
-FrResult frLoadFont(const char* path, FrFont* pFont);
-FrResult frGetGlyphId(const FrFont* pFont, uint32_t characterCode, uint32_t* pGlyphId);
-FrResult frFreeFont(FrFont* pFont);
+FrResult frLoadFont(const char* path, FrFont* font);
+FrResult frGetGlyphId(const FrFont* font, uint32_t characterCode, uint32_t* glyphId);
+void frFreeFont(FrFont* font);
 
 typedef struct FrStringReader
 {
@@ -77,13 +77,13 @@ typedef struct FrStringReader
  * Get the next character code in an UTF-8 string.
  *
  * Parameters:
- * - pStringReader: A valid pointer to a string reader.
- * - pCharacterCode: A valid pointer to a 32-bit unsigned integer that will receive the value of the character code.
+ * - stringReader: A valid pointer to a string reader.
+ * - characterCode: A valid pointer to a 32-bit unsigned integer that will receive the value of the character code.
  * 
  * Returns:
  * - FR_SUCCESS if all went well.
- * - FR_ERROR_INVALID_ARGUMENT if one of the parameters or the string is NULL, or if the sequence of chars does not make sense.
+ * - FR_ERROR_INVALID_ARGUMENT if one of the parameters or the string is null, or if the sequence of chars does not make sense.
  */
-FrResult frNextCharacterCode(FrStringReader* pStringReader, uint32_t* pCharacterCode);
+FrResult frNextCharacterCode(FrStringReader* stringReader, uint32_t* characterCode);
 
 #endif

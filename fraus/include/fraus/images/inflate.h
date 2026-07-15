@@ -8,10 +8,10 @@
 
 /*
  * Inflate deflate encoded data
- * - pData: deflate encoded input data
+ * - data: deflate encoded input data
  * - size: number of bytes in the input data
- * - ppResult: buffer in which to store the result
+ * - result: buffer in which to store the result
  */
-FrResult frInflate(const uint8_t* pData, size_t size, uint8_t* pResult);
+FrResult frInflate(const uint8_t* data, size_t size, uint8_t* result);
 
 #endif

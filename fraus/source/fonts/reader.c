@@ -1,115 +1,84 @@
 #include "fraus/fonts/reader.h"
 
-FrResult frReadInt8(FrFileReader* pReader, int8_t* pValue)
+FrResult frReadInt8(FrFileReader* const reader, int8_t* const value)
 {
-	if(!pReader || !pValue)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
 
-	uint8_t value;
-	const FrResult result = frReadUint8(pReader, &value);
+	uint8_t valueTemp;
+	const FrResult result = frReadUint8(reader, &valueTemp);
 	if(result != FR_SUCCESS)
 	{
 		return result;
 	}
 
-	// Vulkan imposes twos-complement on host
-	*pValue = value;
+	*value = valueTemp;
 
 	return FR_SUCCESS;
 }
 
-FrResult frReadUint8(FrFileReader* pReader, uint8_t* pValue)
+FrResult frReadUint8(FrFileReader* const reader, uint8_t* const value)
 {
-	if(!pReader || !pValue)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	if(fread(pReader->buffer, 1, 1, pReader->file) != 1)
+	if(fread(reader->buffer, 1, 1, reader->file) != 1)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
-	*pValue = pReader->buffer[0];
+	*value = reader->buffer[0];
 
 	return FR_SUCCESS;
 }
 
-FrResult frReadUint16(FrFileReader* pReader, uint16_t* pValue)
+FrResult frReadUint16(FrFileReader* const reader, uint16_t* const value)
 {
-	if(!pReader || !pValue)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	if(fread(pReader->buffer, 1, 2, pReader->file) != 2)
+	if(fread(reader->buffer, 1, 2, reader->file) != 2)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
-	*pValue = FR_MSBF_TO_U16(pReader->buffer);
+	*value = FR_MSBF_TO_U16(reader->buffer);
 
 	return FR_SUCCESS;
 }
 
-FrResult frReadInt16(FrFileReader* pReader, int16_t* pValue)
+FrResult frReadInt16(FrFileReader* const reader, int16_t* const value)
 {
-	if(!pReader || !pValue)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	uint16_t value;
-	const FrResult result = frReadUint16(pReader, &value);
+	uint16_t valueTemp;
+	const FrResult result = frReadUint16(reader, &valueTemp);
 	if(result != FR_SUCCESS)
 	{
 		return result;
 	}
 
-	// Vulkan imposes twos-complement on host
-	*pValue = value;
+	*value = valueTemp;
 
 	return FR_SUCCESS;
 }
 
-FrResult frReadUint32(FrFileReader* pReader, uint32_t* pValue)
+FrResult frReadUint32(FrFileReader* const reader, uint32_t* const value)
 {
-	if(!pReader || !pValue)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	if(fread(pReader->buffer, 1, 4, pReader->file) != 4)
+	if(fread(reader->buffer, 1, 4, reader->file) != 4)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
-	*pValue = FR_MSBF_TO_U32(pReader->buffer);
+	*value = FR_MSBF_TO_U32(reader->buffer);
 
 	return FR_SUCCESS;
 }
 
-FrResult frReadF2d14(FrFileReader* pReader, float* pValue)
+FrResult frReadF2d14(FrFileReader* const reader, float* const value)
 {
-	uint16_t value;
-	const FrResult result = frReadUint16(pReader, &value);
+	uint16_t valueTemp;
+	const FrResult result = frReadUint16(reader, &valueTemp);
 	if(result != FR_SUCCESS)
 	{
 		return result;
 	}
 
-	*pValue = FR_F2D14_FLOAT(value);
+	*value = FR_F2D14_FLOAT(valueTemp);
 
 	return FR_SUCCESS;
 }
 
-FrResult frSkipBytes(FrFileReader* pReader, long bytes)
+FrResult frSkipBytes(FrFileReader* const reader, const long bytes)
 {
-	if(!pReader)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	if(fseek(pReader->file, bytes, SEEK_CUR) != 0)
+	if(fseek(reader->file, bytes, SEEK_CUR) != 0)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
@@ -117,14 +86,9 @@ FrResult frSkipBytes(FrFileReader* pReader, long bytes)
 	return FR_SUCCESS;
 }
 
-FrResult frMoveTo(FrFileReader* pReader, long offset)
+FrResult frMoveTo(FrFileReader* const reader, const long offset)
 {
-	if(!pReader)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	if(fseek(pReader->file, offset, SEEK_SET) != 0)
+	if(fseek(reader->file, offset, SEEK_SET) != 0)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}

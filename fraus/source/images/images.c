@@ -1,7 +1,6 @@
 #include "../../include/fraus/images/images.h"
 
 #include <errno.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -95,7 +94,7 @@ static uint32_t frCrc(const uint8_t* data, uint32_t size)
 	return ~crc;
 }
 
-static uint8_t frPaeth(uint8_t a, uint8_t b, uint8_t c)
+static uint8_t frPaeth(const uint8_t a, const uint8_t b, const uint8_t c)
 {
 	const int16_t p = a + b - c;
 
@@ -114,7 +113,7 @@ static uint8_t frPaeth(uint8_t a, uint8_t b, uint8_t c)
 	return c;
 }
 
-FrResult frLoadPNG(const char* path, FrImage* pImage)
+FrResult frLoadPNG(const char* const path, FrImage* const image)
 {
 	// Open file
 	FILE* const file = fopen(path, "rb");
@@ -148,8 +147,8 @@ FrResult frLoadPNG(const char* path, FrImage* pImage)
 	bool first = true;
 	bool dataChunksStarted = false;
 	bool dataChunksFinished = false;
-	uint8_t* data = NULL;
-	uint8_t* typeAndData = NULL;
+	uint8_t* data = nullptr;
+	uint8_t* typeAndData = nullptr;
 	size_t dataSize = 0;
 
 	// Loop through PNG chunks
@@ -234,9 +233,9 @@ FrResult frLoadPNG(const char* path, FrImage* pImage)
 			}
 
 			// Read image dimnesions
-			pImage->width = FR_MSBF_TO_U32(typeAndData + 4);
-			pImage->height = FR_MSBF_TO_U32(typeAndData + 8);
-			if(pImage->width == 0 || pImage->height == 0)
+			image->width = FR_MSBF_TO_U32(typeAndData + 4);
+			image->height = FR_MSBF_TO_U32(typeAndData + 8);
+			if(image->width == 0 || image->height == 0)
 			{
 				free(typeAndData);
 				fclose(file);
@@ -247,23 +246,23 @@ FrResult frLoadPNG(const char* path, FrImage* pImage)
 			switch(typeAndData[13])
 			{
 				case 0:
-					pImage->type = FR_GRAY;
+					image->type = FR_GRAY;
 					break;
 
 				case 2:
-					pImage->type = FR_RGB;
+					image->type = FR_RGB;
 					break;
 
 				case 3:
-					pImage->type = FR_RGB;
+					image->type = FR_RGB;
 					break;
 
 				case 4:
-					pImage->type = FR_GRAY_ALPHA;
+					image->type = FR_GRAY_ALPHA;
 					break;
 
 				case 6:
-					pImage->type = FR_RGB_ALPHA;
+					image->type = FR_RGB_ALPHA;
 					break;
 
 				default:
@@ -273,8 +272,8 @@ FrResult frLoadPNG(const char* path, FrImage* pImage)
 			}
 
 			// Allocate data
-			pImage->data = malloc(pImage->width * pImage->height * pImage->type);
-			if(!pImage->data)
+			image->data = malloc(image->width * image->height * image->type);
+			if(!image->data)
 			{
 				free(typeAndData);
 				fclose(file);
@@ -310,7 +309,10 @@ FrResult frLoadPNG(const char* path, FrImage* pImage)
 				return FR_ERROR_UNKNOWN;
 			}
 
-			if(!dataChunksStarted) dataChunksStarted = true;
+			if(!dataChunksStarted)
+			{
+				dataChunksStarted = true;
+			}
 
 			// Read data
 			uint8_t* const newData = realloc(data, dataSize + length);
@@ -389,7 +391,7 @@ FrResult frLoadPNG(const char* path, FrImage* pImage)
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
-	const size_t resultSize = (size_t)pImage->height * ((size_t)pImage->width * (size_t)pImage->type + 1);
+	const size_t resultSize = (size_t)image->height * ((size_t)image->width * (size_t)image->type + 1);
 	uint8_t* const inflateResult = malloc(resultSize);
 	if(!inflateResult)
 	{
@@ -420,52 +422,52 @@ FrResult frLoadPNG(const char* path, FrImage* pImage)
 	free(data);
 
 	// Undo filtering
-	for(uint32_t i = 0; i < pImage->height; ++i)
+	for(uint32_t i = 0; i < image->height; ++i)
 	{
-		switch(inflateResult[(pImage->width * pImage->type + 1) * i])
+		switch(inflateResult[(image->width * image->type + 1) * i])
 		{
 			// Same byte
 			case 0:
-				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
+				for(uint32_t j = 0; j < image->width * image->type; ++j)
 				{
-					pImage->data[pImage->width * pImage->type * i + j] = inflateResult[(pImage->width * pImage->type + 1) * i + j + 1];
+					image->data[image->width * image->type * i + j] = inflateResult[(image->width * image->type + 1) * i + j + 1];
 				}
 				break;
 
 			// Same byte in previous pixel
 			case 1:
-				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
+				for(uint32_t j = 0; j < image->width * image->type; ++j)
 				{
-					pImage->data[pImage->width * pImage->type * i + j] = inflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + (j < (uint32_t)pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j]);
+					image->data[image->width * image->type * i + j] = inflateResult[(image->width * image->type + 1) * i + j + 1] + (j < (uint32_t)image->type ? 0 : image->data[image->type * (image->width * i - 1) + j]);
 				}
 				break;
 
 			// Same byte in previous scanline
 			case 2:
-				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
+				for(uint32_t j = 0; j < image->width * image->type; ++j)
 				{
-					pImage->data[pImage->width * pImage->type * i + j] = inflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + pImage->data[pImage->width * pImage->type * (i - 1) + j];
+					image->data[image->width * image->type * i + j] = inflateResult[(image->width * image->type + 1) * i + j + 1] + image->data[image->width * image->type * (i - 1) + j];
 				}
 				break;
 
 			// Same byte in previous pixel in previous scanline
 			case 3:
-				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
+				for(uint32_t j = 0; j < image->width * image->type; ++j)
 				{
-					pImage->data[pImage->width * pImage->type * i + j] = inflateResult[(pImage->width * pImage->type + 1) * i + j + 1] + ((j < (uint32_t)pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j]) + pImage->data[pImage->width * pImage->type * (i - 1) + j]) / 2;
+					image->data[image->width * image->type * i + j] = inflateResult[(image->width * image->type + 1) * i + j + 1] + ((j < (uint32_t)image->type ? 0 : image->data[image->type * (image->width * i - 1) + j]) + image->data[image->width * image->type * (i - 1) + j]) / 2;
 				}
 				break;
 
 			// Paeth
 			case 4:
-				for(uint32_t j = 0; j < pImage->width * pImage->type; ++j)
+				for(uint32_t j = 0; j < image->width * image->type; ++j)
 				{
-					pImage->data[pImage->width * pImage->type * i + j] =
-						inflateResult[(pImage->width * pImage->type + 1) * i + j + 1] +
+					image->data[image->width * image->type * i + j] =
+						inflateResult[(image->width * image->type + 1) * i + j + 1] +
 						frPaeth(
-							j < (uint32_t)pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * i - 1) + j],
-							i == 0 ? 0 : (pImage->data[pImage->width * pImage->type * (i - 1) + j]),
-							i == 0 ? 0 : (j < (uint32_t)pImage->type ? 0 : pImage->data[pImage->type * (pImage->width * (i - 1) - 1) + j])
+							j < (uint32_t)image->type ? 0 : image->data[image->type * (image->width * i - 1) + j],
+							i == 0 ? 0 : (image->data[image->width * image->type * (i - 1) + j]),
+							i == 0 ? 0 : (j < (uint32_t)image->type ? 0 : image->data[image->type * (image->width * (i - 1) - 1) + j])
 						);
 				}
 				break;

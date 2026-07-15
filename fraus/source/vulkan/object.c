@@ -1,19 +1,17 @@
 #include "../../include/fraus/vulkan/object.h"
 
 #include "../../include/fraus/models/models.h"
-#include "./functions.h"
 #include "../../include/fraus/vulkan/vulkan_utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-FR_DEFINE_VECTOR(FrVulkanObject, VulkanObject)
-
-FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uint32_t* bindingIndexes)
+FrResult frCreateObject(FrEngine* const engine, const char* const modelPath, const uint32_t pipelineIndex, const uint32_t* const bindingIndexes)
 {
 	FrVulkanObject object = {
-		.pipelineIndex = pipelineIndex
+		.pipelineIndex = pipelineIndex,
+		.instanceCount = 1
 	};
 
 	FrModel model;
@@ -28,35 +26,36 @@ FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uin
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
 
-	if(frCreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory) != FR_SUCCESS)
+	if(frCreateBuffer(engine, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory) != VK_SUCCESS)
 	{
 		return FR_ERROR_UNKNOWN;
 	}
 
 	void* data;
-	vkMapMemory(device, stagingBufferMemory, 0, size, 0, &data);
+	engine->vkMapMemory(engine->device, stagingBufferMemory, 0, size, 0, &data);
 	memcpy(data, model.vertices, model.vertexCount * sizeof(model.vertices[0]));
 	memcpy((uint8_t*)data + model.vertexCount * sizeof(model.vertices[0]), model.indexes, model.indexCount * sizeof(model.indexes[0]));
-	vkUnmapMemory(device, stagingBufferMemory);
+	engine->vkUnmapMemory(engine->device, stagingBufferMemory);
 
 	if(frCreateBuffer(
+		engine,
 		size,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		&object.buffer,
-		&object.memory) != FR_SUCCESS
+		&object.memory) != VK_SUCCESS
 	)
 	{
 		return FR_ERROR_UNKNOWN;
 	}
 
-	if(frCopyBuffer(stagingBuffer, object.buffer, size) != FR_SUCCESS)
+	if(frCopyBuffer(engine, stagingBuffer, object.buffer, size) != VK_SUCCESS)
 	{
 		return FR_ERROR_UNKNOWN;
 	}
 
-	vkDestroyBuffer(device, stagingBuffer, NULL);
-	vkFreeMemory(device, stagingBufferMemory, NULL);
+	engine->vkDestroyBuffer(engine->device, stagingBuffer, nullptr);
+	engine->vkFreeMemory(engine->device, stagingBufferMemory, nullptr);
 
 	object.vertexCount = model.vertexCount;
 	object.vertices = model.vertices;
@@ -66,9 +65,9 @@ FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uin
 	uint32_t uniformBuffersCount = 0;
 	uint32_t storageBuffersCount = 0;
 	uint32_t texturesCount = 0;
-	for(uint32_t descriptorTypeIndex = 0; descriptorTypeIndex < graphicsPipelines.data[pipelineIndex].descriptorTypeCount; ++descriptorTypeIndex)
+	for(uint32_t descriptorTypeIndex = 0; descriptorTypeIndex < engine->graphicsPipelines[pipelineIndex].descriptorTypeCount; ++descriptorTypeIndex)
 	{
-		switch(graphicsPipelines.data[pipelineIndex].descriptorTypes[descriptorTypeIndex])
+		switch(engine->graphicsPipelines[pipelineIndex].descriptorTypes[descriptorTypeIndex])
 		{
 			case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
 				++texturesCount;
@@ -87,11 +86,7 @@ FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uin
 		}
 	}
 
-	VkDescriptorPoolSize* const poolSizes = malloc(3 * sizeof(poolSizes[0]));
-	if(!poolSizes)
-	{
-		return FR_ERROR_OUT_OF_HOST_MEMORY;
-	}
+	VkDescriptorPoolSize poolSizes[3];
 
 	uint32_t poolSizeCount = 0;
 	if(uniformBuffersCount > 0)
@@ -123,25 +118,23 @@ FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uin
 		.pPoolSizes = poolSizes
 	};
 
-	if(vkCreateDescriptorPool(
-		device,
+	if(engine->vkCreateDescriptorPool(
+		engine->device,
 		&descriptorPoolCreateInfo,
-		NULL,
+		nullptr,
 		&object.descriptorPool
 	) != VK_SUCCESS)
 	{
-		vkDestroyBuffer(device, object.buffer, NULL);
-		vkFreeMemory(device, object.memory, NULL);
+		engine->vkDestroyBuffer(engine->device, object.buffer, nullptr);
+		engine->vkFreeMemory(engine->device, object.memory, nullptr);
 		return FR_ERROR_UNKNOWN;
 	}
-
-	free(poolSizes);
 
 	// Descriptor set
 	VkDescriptorSetLayout layouts[FR_FRAMES_IN_FLIGHT];
 	for(uint32_t i = 0; i < FR_FRAMES_IN_FLIGHT; i++)
 	{
-		layouts[i] = graphicsPipelines.data[pipelineIndex].descriptorSetLayout;
+		layouts[i] = engine->graphicsPipelines[pipelineIndex].descriptorSetLayout;
 	}
 
 	const VkDescriptorSetAllocateInfo descriptorSetsAllocateInfo = {
@@ -150,38 +143,38 @@ FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uin
 		.descriptorSetCount = FR_FRAMES_IN_FLIGHT,
 		.pSetLayouts = layouts
 	};
-	if(vkAllocateDescriptorSets(device, &descriptorSetsAllocateInfo, object.descriptorSets) != VK_SUCCESS)
+	if(engine->vkAllocateDescriptorSets(engine->device, &descriptorSetsAllocateInfo, object.descriptorSets) != VK_SUCCESS)
 	{
-		vkDestroyDescriptorPool(device, object.descriptorPool, NULL);
-		vkDestroyBuffer(device, object.buffer, NULL);
-		vkFreeMemory(device, object.memory, NULL);
+		engine->vkDestroyDescriptorPool(engine->device, object.descriptorPool, nullptr);
+		engine->vkDestroyBuffer(engine->device, object.buffer, nullptr);
+		engine->vkFreeMemory(engine->device, object.memory, nullptr);
 		return FR_ERROR_UNKNOWN;
 	}
 
-	VkWriteDescriptorSet* const descriptorWrites = malloc(graphicsPipelines.data[pipelineIndex].descriptorTypeCount * sizeof(descriptorWrites[0]));
+	VkWriteDescriptorSet* const descriptorWrites = malloc(engine->graphicsPipelines[pipelineIndex].descriptorTypeCount * sizeof(descriptorWrites[0]));
 	if(!descriptorWrites)
 	{
-		vkDestroyDescriptorPool(device, object.descriptorPool, NULL);
-		vkDestroyBuffer(device, object.buffer, NULL);
-		vkFreeMemory(device, object.memory, NULL);
+		engine->vkDestroyDescriptorPool(engine->device, object.descriptorPool, nullptr);
+		engine->vkDestroyBuffer(engine->device, object.buffer, nullptr);
+		engine->vkFreeMemory(engine->device, object.memory, nullptr);
 		return FR_ERROR_UNKNOWN;
 	}
 	for(uint32_t descriptorSetIndex = 0; descriptorSetIndex < FR_FRAMES_IN_FLIGHT; ++descriptorSetIndex)
 	{
-		for(uint32_t descriptorTypeIndex = 0; descriptorTypeIndex < graphicsPipelines.data[pipelineIndex].descriptorTypeCount; ++descriptorTypeIndex)
+		for(uint32_t descriptorTypeIndex = 0; descriptorTypeIndex < engine->graphicsPipelines[pipelineIndex].descriptorTypeCount; ++descriptorTypeIndex)
 		{
-			switch(graphicsPipelines.data[pipelineIndex].descriptorTypes[descriptorTypeIndex])
+			switch(engine->graphicsPipelines[pipelineIndex].descriptorTypes[descriptorTypeIndex])
 			{
 				case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
 				{
-					VkDescriptorBufferInfo* const pBufferInfo = malloc(sizeof(*pBufferInfo));
-					if(!pBufferInfo)
+					VkDescriptorBufferInfo* const bufferInfo = malloc(sizeof(*bufferInfo));
+					if(!bufferInfo)
 					{
 						return FR_ERROR_OUT_OF_HOST_MEMORY;
 					}
-					pBufferInfo->buffer = uniformBuffers.data[bindingIndexes[descriptorTypeIndex]].buffers[descriptorSetIndex];
-					pBufferInfo->offset = 0;
-					pBufferInfo->range = uniformBuffers.data[bindingIndexes[descriptorTypeIndex]].buffersSize;
+					bufferInfo->buffer = engine->uniformBuffers[bindingIndexes[descriptorTypeIndex]].buffers[descriptorSetIndex];
+					bufferInfo->offset = 0;
+					bufferInfo->range = engine->uniformBuffers[bindingIndexes[descriptorTypeIndex]].buffersSize;
 
 					descriptorWrites[descriptorTypeIndex] = (VkWriteDescriptorSet){
 						.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -190,21 +183,21 @@ FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uin
 						.dstArrayElement = 0,
 						.descriptorCount = 1,
 						.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-						.pBufferInfo = pBufferInfo
+						.pBufferInfo = bufferInfo
 					};
 					break;
 				}
 
 				case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
 				{
-					VkDescriptorBufferInfo* const pBufferInfo = malloc(sizeof(*pBufferInfo));
-					if(!pBufferInfo)
+					VkDescriptorBufferInfo* const bufferInfo = malloc(sizeof(*bufferInfo));
+					if(!bufferInfo)
 					{
 						return FR_ERROR_OUT_OF_HOST_MEMORY;
 					}
-					pBufferInfo->buffer = storageBuffers.data[bindingIndexes[descriptorTypeIndex]].buffer;
-					pBufferInfo->offset = 0;
-					pBufferInfo->range = storageBuffers.data[bindingIndexes[descriptorTypeIndex]].bufferSize;
+					bufferInfo->buffer = engine->storageBuffers[bindingIndexes[descriptorTypeIndex]].buffer;
+					bufferInfo->offset = 0;
+					bufferInfo->range = engine->storageBuffers[bindingIndexes[descriptorTypeIndex]].bufferSize;
 
 					descriptorWrites[descriptorTypeIndex] = (VkWriteDescriptorSet){
 						.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -213,21 +206,21 @@ FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uin
 						.dstArrayElement = 0,
 						.descriptorCount = 1,
 						.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-						.pBufferInfo = pBufferInfo
+						.pBufferInfo = bufferInfo
 					};
 					break;
 				}
 
 				case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
 				{
-					VkDescriptorImageInfo* const pImageInfo = malloc(sizeof(*pImageInfo));
-					if(!pImageInfo)
+					VkDescriptorImageInfo* const imageInfo = malloc(sizeof(*imageInfo));
+					if(!imageInfo)
 					{
 						return FR_ERROR_OUT_OF_HOST_MEMORY;
 					}
-					pImageInfo->sampler = textureSampler;
-					pImageInfo->imageView = textures.data[bindingIndexes[descriptorTypeIndex]].imageView;
-					pImageInfo->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					imageInfo->sampler = engine->textureSampler;
+					imageInfo->imageView = engine->textures[bindingIndexes[descriptorTypeIndex]].imageView;
+					imageInfo->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 					descriptorWrites[descriptorTypeIndex] = (VkWriteDescriptorSet){
 						.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -236,7 +229,7 @@ FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uin
 						.dstArrayElement = 0,
 						.descriptorCount = 1,
 						.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-						.pImageInfo = pImageInfo
+						.pImageInfo = imageInfo
 					};
 					break;
 				}
@@ -246,9 +239,9 @@ FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uin
 			}
 		}
 		
-		vkUpdateDescriptorSets(device, graphicsPipelines.data[pipelineIndex].descriptorTypeCount, descriptorWrites, 0, NULL);
+		engine->vkUpdateDescriptorSets(engine->device, engine->graphicsPipelines[pipelineIndex].descriptorTypeCount, descriptorWrites, 0, nullptr);
 
-		for(uint32_t descriptorTypeIndex = 0; descriptorTypeIndex < graphicsPipelines.data[pipelineIndex].descriptorTypeCount; ++descriptorTypeIndex)
+		for(uint32_t descriptorTypeIndex = 0; descriptorTypeIndex < engine->graphicsPipelines[pipelineIndex].descriptorTypeCount; ++descriptorTypeIndex)
 		{
 			if(descriptorWrites[descriptorTypeIndex].pBufferInfo)
 			{
@@ -264,19 +257,20 @@ FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uin
 	free(descriptorWrites);
 	free(model.indexes);
 
-	if(frPushBackVulkanObjectVector(&frObjects, object) != FR_SUCCESS)
-	{
-		return FR_ERROR_UNKNOWN;
-	}
+	engine->objects[engine->objectCount] = object;
+	++engine->objectCount;
 
 	return FR_SUCCESS;
 }
 
-void frDestroyObject(FrVulkanObject* pObject)
+void frDestroyObject(FrEngine* const engine, FrVulkanObject* const object)
 {
-	free(pObject->vertices);
+	free(object->vertices);
 
-	vkDestroyDescriptorPool(device, pObject->descriptorPool, NULL);
-	vkDestroyBuffer(device, pObject->buffer, NULL);
-	vkFreeMemory(device, pObject->memory, NULL);
+	engine->vkDestroyBuffer(engine->device, object->instanceBuffer, nullptr);
+	engine->vkFreeMemory(engine->device, object->instanceBufferMemory, nullptr);
+
+	engine->vkDestroyDescriptorPool(engine->device, object->descriptorPool, nullptr);
+	engine->vkDestroyBuffer(engine->device, object->buffer, nullptr);
+	engine->vkFreeMemory(engine->device, object->memory, nullptr);
 }

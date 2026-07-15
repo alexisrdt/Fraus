@@ -4,45 +4,43 @@
 
 #include "../include/fraus/fraus.h"
 
-FrCamera camera;
-
-void frCreateCamera(void)
+void frCreateCamera(FrCamera* const camera)
 {
-	camera.position.x = 0.f;
-	camera.position.y = 0.f;
-	camera.position.z = 0.f;
+	camera->position.x = 0.f;
+	camera->position.y = 0.f;
+	camera->position.z = 0.f;
 
-	camera.yaw = 0.f;
-	camera.pitch = 0.f;
+	camera->yaw = 0.f;
+	camera->pitch = 0.f;
 
-	camera.nearPlane = 0.01f;
-	camera.farPlane = -1.f;
+	camera->nearPlane = 0.01f;
+	camera->farPlane = -1.f;
 
-	camera.translationSpeed = 3.f;
-	camera.rotationSpeed = 0.003f;
+	camera->translationSpeed = 3.f;
+	camera->rotationSpeed = 0.003f;
 }
 
-void frGetCameraMatrix(float matrix[16])
+void frGetCameraMatrix(const FrCamera* const camera, const FrEngine* const engine, float matrix[const 16])
 {
 	// Compute objective
 	const FrVec3 objective = {
-		.x = camera.position.x + cosf(camera.yaw) * sinf(camera.pitch),
-		.y = camera.position.y + sinf(camera.yaw) * sinf(camera.pitch),
-		.z = camera.position.z + cosf(camera.pitch)
+		.x = camera->position.x + cosf(camera->yaw) * sinf(camera->pitch),
+		.y = camera->position.y + sinf(camera->yaw) * sinf(camera->pitch),
+		.z = camera->position.z + cosf(camera->pitch)
 	};
 
 	// Compute view matrix
 	float viewMatrix[16];
-	frLookAt(viewMatrix, &camera.position, &objective);
+	frLookAt(viewMatrix, &camera->position, &objective);
 
 	float perspectiveMatrix[16];
-	if(camera.farPlane < 0.f)
+	if(camera->farPlane < 0.f)
 	{
 		frPerspectiveInfiniteFar(
 			perspectiveMatrix,
 			PI / 4.f,
-			(float)swapchainExtent.width / (float)swapchainExtent.height,
-			camera.nearPlane
+			(float)engine->swapchainExtent.width / (float)engine->swapchainExtent.height,
+			camera->nearPlane
 		);
 	}
 	else
@@ -50,9 +48,9 @@ void frGetCameraMatrix(float matrix[16])
 		frPerspective(
 			perspectiveMatrix,
 			PI / 4.f,
-			(float)swapchainExtent.width / (float)swapchainExtent.height,
-			camera.nearPlane,
-			camera.farPlane
+			(float)engine->swapchainExtent.width / (float)engine->swapchainExtent.height,
+			camera->nearPlane,
+			camera->farPlane
 		);
 	}
 

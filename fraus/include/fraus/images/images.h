@@ -23,6 +23,6 @@ typedef struct FrImage
 	FrImageType type;
 } FrImage;
 
-FrResult frLoadPNG(const char* path, FrImage* pImage);
+FrResult frLoadPNG(const char* path, FrImage* image);
 
 #endif

@@ -1,14 +1,16 @@
 #ifndef FRAUS_VULKAN_VULKAN_H
 #define FRAUS_VULKAN_VULKAN_H
 
-#include "../../../source/vulkan/functions.h"
 #include "./include.h"
 #include "./object.h"
 #include "./vulkan_utils.h"
 #include "../window.h"
 
-FrResult frCreateVulkanData(const char* name, uint32_t version);
-FrResult frDestroyVulkanData(void);
+FrResult frInitializeVulkan(void);
+FrResult frFinishVulkan(void);
+
+FrResult frCreateVulkanEngine(FrApplication* application, const char* name, uint32_t version);
+void frDestroyVulkanEngine(FrEngine* engine);
 
 typedef struct FrPipelineCreateInfo
 {
@@ -22,12 +24,17 @@ typedef struct FrPipelineCreateInfo
 	bool depthTestDisable: 1;
 	bool alphaBlendEnable: 1;
 } FrPipelineCreateInfo;
-FrResult frCreateGraphicsPipeline(const FrPipelineCreateInfo* pCreateInfo);
-FrResult frCreateUniformBuffer(VkDeviceSize size);
-FrResult frCreateStorageBuffer(VkDeviceSize size);
-FrResult frSetStorageBufferData(uint32_t storageBufferIndex, const void* data, VkDeviceSize size);
-FrResult frDrawFrame(void);
+FrResult frReserveGraphicsPipelines(FrEngine* engine, size_t count);
+FrResult frCreateGraphicsPipeline(FrEngine* engine, const FrPipelineCreateInfo* createInfo);
+FrResult frReserveUniformBuffers(FrEngine* engine, size_t count);
+FrResult frCreateUniformBuffer(FrEngine* engine, VkDeviceSize size);
+FrResult frReserveStorageBuffers(FrEngine* engine, size_t count);
+FrResult frCreateStorageBuffer(FrEngine* engine, VkDeviceSize size);
+FrResult frSetStorageBufferData(FrEngine* engine, uint32_t storageBufferIndex, const void* data, VkDeviceSize size);
+FrResult frReserveTextures(FrEngine* engine, size_t count);
+FrResult frReserveObjects(FrEngine* engine, size_t count);
+FrResult frDrawFrame(FrApplication* application);
 
-FrResult frRecreateSwapchain(void);
+FrResult frRecreateSwapchain(FrApplication* application);
 
 #endif

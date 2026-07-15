@@ -36,15 +36,15 @@ typedef enum FrResult
  * A comparison function.
  *
  * Parameters:
- * - pFirstVoid: Pointer to the first object to compare.
- * - pSecondVoid: Pointer to the second object to compare.
+ * - firstVoid: Pointer to the first object to compare.
+ * - secondVoid: Pointer to the second object to compare.
  * 
  * Returns:
  * - A negative number if the first object is less than the second.
  * - A positive number if the first object is more than the second.
  * - 0 if both objects are equal.
  */
-typedef int (*FrCompareFunction)(const void* pFirstVoid, const void* pSecondVoid);
+typedef int (*FrCompareFunction)(const void* firstVoid, const void* secondVoid);
 
 /*
  * Merge two sorted arrays based on a comparison function.

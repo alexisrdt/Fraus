@@ -3,7 +3,7 @@
 
 #include "./include.h"
 
-FrResult frCreateObject(const char* modelPath, uint32_t pipelineIndex, const uint32_t* bindingIndexes);
-void frDestroyObject(FrVulkanObject* pObject);
+FrResult frCreateObject(FrEngine* engine, const char* modelPath, uint32_t pipelineIndex, const uint32_t* bindingIndexes);
+void frDestroyObject(FrEngine* engine, FrVulkanObject* object);
 
 #endif

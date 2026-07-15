@@ -1,29 +1,9 @@
 #include "fraus/fonts/fonts.h"
 
-#include <assert.h>
 #include <limits.h>
 #include <math.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-static FrResult frResize(void* pDataVoid, size_t newSize)
-{
-	if(!pDataVoid || newSize == 0)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	void** const pData = pDataVoid;
-	void* const newData = realloc(*pData, newSize);
-	if(!newData)
-	{
-		return FR_ERROR_OUT_OF_HOST_MEMORY;
-	}
-	*pData = newData;
-
-	return FR_SUCCESS;
-}
 
 #define FR_CMAP_TAG FR_BYTES_TO_U32('c', 'm', 'a', 'p')
 #define FR_GLYF_TAG FR_BYTES_TO_U32('g', 'l', 'y', 'f')
@@ -36,7 +16,7 @@ static FrResult frResize(void* pDataVoid, size_t newSize)
 typedef struct FrFontFile
 {
 	FrFileReader reader;
-	FrFont* pFont;
+	FrFont* font;
 
 	uint32_t cmapOffset;
 	uint32_t glyfOffset;
@@ -60,25 +40,25 @@ typedef struct FrFontFile
 	uint16_t advanceWidthCount;
 } FrFontFile;
 
-static FrResult frParseTableDirectory(FrFontFile* pFontFile)
+static FrResult frParseTableDirectory(FrFontFile* const fontFile)
 {
-	if(!pFontFile)
+	if(!fontFile)
 	{
 		return FR_ERROR_INVALID_ARGUMENT;
 	}
 
-	if(frSkipBytes(&pFontFile->reader, 4) != FR_SUCCESS)
+	if(frSkipBytes(&fontFile->reader, 4) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
 	uint16_t numTables;
-	if(frReadUint16(&pFontFile->reader, &numTables) != FR_SUCCESS)
+	if(frReadUint16(&fontFile->reader, &numTables) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
-	if(frSkipBytes(&pFontFile->reader, 6) != FR_SUCCESS)
+	if(frSkipBytes(&fontFile->reader, 6) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
@@ -86,18 +66,18 @@ static FrResult frParseTableDirectory(FrFontFile* pFontFile)
 	for(uint16_t tableIndex = 0; tableIndex < numTables; ++tableIndex)
 	{
 		uint32_t tag;
-		if(frReadUint32(&pFontFile->reader, &tag) != FR_SUCCESS)
+		if(frReadUint32(&fontFile->reader, &tag) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
-		if(frSkipBytes(&pFontFile->reader, 4) != FR_SUCCESS)
+		if(frSkipBytes(&fontFile->reader, 4) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
 		uint32_t offset;
-		if(frReadUint32(&pFontFile->reader, &offset) != FR_SUCCESS || offset > LONG_MAX)
+		if(frReadUint32(&fontFile->reader, &offset) != FR_SUCCESS || offset > LONG_MAX)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
@@ -105,49 +85,49 @@ static FrResult frParseTableDirectory(FrFontFile* pFontFile)
 		switch(tag)
 		{
 			case FR_CMAP_TAG:
-				pFontFile->cmapOffset = offset;
+				fontFile->cmapOffset = offset;
 				break;
 
 			case FR_GLYF_TAG:
-				pFontFile->glyfOffset = offset;
+				fontFile->glyfOffset = offset;
 				break;
 
 			case FR_HEAD_TAG:
-				pFontFile->headOffset = offset;
+				fontFile->headOffset = offset;
 				break;
 
 			case FR_HHEA_TAG:
-				pFontFile->hheaOffset = offset;
+				fontFile->hheaOffset = offset;
 				break;
 
 			case FR_HMTX_TAG:
-				pFontFile->hmtxOffset = offset;
+				fontFile->hmtxOffset = offset;
 				break;
 
 			case FR_LOCA_TAG:
-				pFontFile->locaOffset = offset;
+				fontFile->locaOffset = offset;
 				break;
 
 			case FR_MAXP_TAG:
-				pFontFile->maxpOffset = offset;
+				fontFile->maxpOffset = offset;
 				break;
 
 			default:
 				break;
 		}
 
-		if(frSkipBytes(&pFontFile->reader, 4) != FR_SUCCESS)
+		if(frSkipBytes(&fontFile->reader, 4) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 	}
 
 	if(
-		pFontFile->cmapOffset == 0 ||
-		pFontFile->glyfOffset == 0 ||
-		pFontFile->headOffset == 0 ||
-		pFontFile->locaOffset == 0 ||
-		pFontFile->maxpOffset == 0
+		fontFile->cmapOffset == 0 ||
+		fontFile->glyfOffset == 0 ||
+		fontFile->headOffset == 0 ||
+		fontFile->locaOffset == 0 ||
+		fontFile->maxpOffset == 0
 	)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
@@ -156,73 +136,75 @@ static FrResult frParseTableDirectory(FrFontFile* pFontFile)
 	return FR_SUCCESS;
 }
 
-static FrResult frParseSimpleGlyph(FrFontFile* pFile, uint16_t contourCount)
+static FrResult frParseSimpleGlyph(FrFontFile* const file, const uint16_t contourCount)
 {
-	const uint16_t id = pFile->parent ? pFile->currentGlyph : pFile->currentChild;
+	const uint16_t id = file->parent ? file->currentGlyph : file->currentChild;
 
-	const int16_t xMin = pFile->pFont->glyphPositions[id].xMin;
-	const int16_t yMin = pFile->pFont->glyphPositions[id].yMin;
-	const int16_t xMax = pFile->pFont->glyphPositions[id].xMax;
-	const int16_t yMax = pFile->pFont->glyphPositions[id].yMax;
+	const int16_t xMin = file->font->glyphPositions[id].xMin;
+	const int16_t yMin = file->font->glyphPositions[id].yMin;
+	const int16_t xMax = file->font->glyphPositions[id].xMax;
+	const int16_t yMax = file->font->glyphPositions[id].yMax;
 
 	const float widthInv = 1.f / (xMax - xMin);
 	const float heightInv = 1.f / (yMax - yMin);
 
 	// Read contour info
-	const uint16_t contourInfoOffset = pFile->pFont->contourInfoCount;
+	const uint16_t contourInfoOffset = file->font->contourInfoCount;
 	for(uint16_t i = 0; i < contourCount; ++i)
 	{
 		uint16_t contourInfo;
-		if(frReadUint16(&pFile->reader, &contourInfo) != FR_SUCCESS)
+		if(frReadUint16(&file->reader, &contourInfo) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
-		pFile->pFont->contourInfos[pFile->pFont->contourInfoCount] = contourInfo;
-		++pFile->pFont->contourInfoCount;
+		file->font->contourInfos[file->font->contourInfoCount] = contourInfo;
+		++file->font->contourInfoCount;
 	}
 
 	// Skip instructions
 	uint16_t instructionLength;
-	if(frReadUint16(&pFile->reader, &instructionLength) != FR_SUCCESS)
+	if(frReadUint16(&file->reader, &instructionLength) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
-	if(frSkipBytes(&pFile->reader, instructionLength) != FR_SUCCESS)
+	if(frSkipBytes(&file->reader, instructionLength) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
 	// Read flags
-	const uint32_t pointCount = pFile->pFont->contourInfos[pFile->pFont->contourInfoCount - 1] + 1;
-	if(pointCount > pFile->flagsCapacity)
+	const uint32_t pointCount = file->font->contourInfos[file->font->contourInfoCount - 1] + 1;
+	if(pointCount > file->flagsCapacity)
 	{
-		if(frResize(&pFile->flags, pointCount * sizeof(pFile->flags[0])) != FR_SUCCESS)
+		uint8_t* const newFlags = realloc(file->flags, pointCount * sizeof(file->flags[0]));
+		if(!newFlags)
 		{
 			return FR_ERROR_OUT_OF_HOST_MEMORY;
 		}
-		pFile->flagsCapacity = pointCount;
+		file->flags = newFlags;
+		file->flagsCapacity = pointCount;
 	}
 	for(uint32_t i = 0; i < pointCount; ++i)
 	{
-		if(frReadUint8(&pFile->reader, &pFile->flags[i]) != FR_SUCCESS)
+		if(frReadUint8(&file->reader, &file->flags[i]) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
-		if(FR_BIT(pFile->flags[i], 3))
+		if(FR_BIT(file->flags[i], 3))
 		{
 			uint8_t repeatCount;
-			if(frReadUint8(&pFile->reader, &repeatCount) != FR_SUCCESS)
+			if(frReadUint8(&file->reader, &repeatCount) != FR_SUCCESS)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
-			if(repeatCount > pFile->pFont->contourInfos[pFile->pFont->contourInfoCount - 1] - i)
+			if(repeatCount > file->font->contourInfos[file->font->contourInfoCount - 1] - i)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 			for(uint32_t j = 0; j < repeatCount; ++j)
 			{
-				pFile->flags[i + 1 + j] = pFile->flags[i];
+				file->flags[i + 1 + j] = file->flags[i];
 			}
 			i += repeatCount;
 		}
@@ -235,49 +217,49 @@ static FrResult frParseSimpleGlyph(FrFontFile* pFile, uint16_t contourCount)
 	float lastX = -xMin * widthInv;
 	for(uint16_t contourIndex = 0; contourIndex < contourCount; ++contourIndex)
 	{
-		const uint32_t lastPoint = pFile->pFont->contourInfos[contourInfoOffset + contourIndex];
+		const uint32_t lastPoint = file->font->contourInfos[contourInfoOffset + contourIndex];
 
 		for(uint32_t i = firstPoint; i <= lastPoint; ++i)
 		{
 			float x = lastX;
 
-			if(FR_BIT(pFile->flags[i], 1))
+			if(FR_BIT(file->flags[i], 1))
 			{
 				uint8_t coordinate;
-				if(frReadUint8(&pFile->reader, &coordinate) != FR_SUCCESS)
+				if(frReadUint8(&file->reader, &coordinate) != FR_SUCCESS)
 				{
 					return FR_ERROR_CORRUPTED_FILE;
 				}
-				const int16_t sign = FR_BIT(pFile->flags[i], 4) * 2 - 1;
+				const int16_t sign = FR_BIT(file->flags[i], 4) * 2 - 1;
 				const int16_t newX16 = sign * coordinate;
 				x += newX16 * widthInv;
 			}
-			else if(!FR_BIT(pFile->flags[i], 4))
+			else if(!FR_BIT(file->flags[i], 4))
 			{
 				int16_t delta;
-				if(frReadInt16(&pFile->reader, &delta) != FR_SUCCESS)
+				if(frReadInt16(&file->reader, &delta) != FR_SUCCESS)
 				{
 					return FR_ERROR_CORRUPTED_FILE;
 				}
 				x += delta * widthInv;
 			}
 
-			if(i > firstPoint && FR_BIT(pFile->flags[i], 0) == FR_BIT(pFile->flags[i - 1], 0))
+			if(i > firstPoint && FR_BIT(file->flags[i], 0) == FR_BIT(file->flags[i - 1], 0))
 			{
 				const float inBetween = (x + lastX) / 2;
-				pFile->pFont->points[pFile->pFont->pointCount + glyphPointCount].x = inBetween;
+				file->font->points[file->font->pointCount + glyphPointCount].x = inBetween;
 				++glyphPointCount;
 			}
 
-			pFile->pFont->points[pFile->pFont->pointCount + glyphPointCount].x = x;
+			file->font->points[file->font->pointCount + glyphPointCount].x = x;
 			++glyphPointCount;
 
 			lastX = x;
 		}
 
-		if(FR_BIT(pFile->flags[lastPoint], 0) == FR_BIT(pFile->flags[firstPoint], 0))
+		if(FR_BIT(file->flags[lastPoint], 0) == FR_BIT(file->flags[firstPoint], 0))
 		{
-			pFile->pFont->points[pFile->pFont->pointCount + glyphPointCount].x = (pFile->pFont->points[pFile->pFont->pointCount + lastOffset].x + lastX) / 2;
+			file->font->points[file->font->pointCount + glyphPointCount].x = (file->font->points[file->font->pointCount + lastOffset].x + lastX) / 2;
 			++glyphPointCount;
 		}
 
@@ -293,51 +275,51 @@ static FrResult frParseSimpleGlyph(FrFontFile* pFile, uint16_t contourCount)
 	uint16_t contourPointCount = 0;
 	for(uint16_t contourIndex = 0; contourIndex < contourCount; ++contourIndex)
 	{
-		const uint32_t lastPoint = pFile->pFont->contourInfos[contourInfoOffset + contourIndex];
+		const uint32_t lastPoint = file->font->contourInfos[contourInfoOffset + contourIndex];
 
 		for(uint32_t i = firstPoint; i <= lastPoint; ++i)
 		{
 			float y = lastY;
 
-			if(FR_BIT(pFile->flags[i], 2))
+			if(FR_BIT(file->flags[i], 2))
 			{
 				uint8_t coordinate;
-				if(frReadUint8(&pFile->reader, &coordinate) != FR_SUCCESS)
+				if(frReadUint8(&file->reader, &coordinate) != FR_SUCCESS)
 				{
 					return FR_ERROR_CORRUPTED_FILE;
 				}
-				const int16_t sign = FR_BIT(pFile->flags[i], 5) * 2 - 1;
+				const int16_t sign = FR_BIT(file->flags[i], 5) * 2 - 1;
 				const int16_t newY16 = sign * coordinate;
 				y += newY16 * heightInv;
 			}
-			else if(!FR_BIT(pFile->flags[i], 5))
+			else if(!FR_BIT(file->flags[i], 5))
 			{
 				int16_t delta;
-				if(frReadInt16(&pFile->reader, &delta) != FR_SUCCESS)
+				if(frReadInt16(&file->reader, &delta) != FR_SUCCESS)
 				{
 					return FR_ERROR_CORRUPTED_FILE;
 				}
 				y += delta * heightInv;
 			}
 
-			if(i > firstPoint && FR_BIT(pFile->flags[i], 0) == FR_BIT(pFile->flags[i - 1], 0))
+			if(i > firstPoint && FR_BIT(file->flags[i], 0) == FR_BIT(file->flags[i - 1], 0))
 			{
 				const float inBetween = (y + lastY) / 2;
-				pFile->pFont->points[pFile->pFont->pointCount + glyphPointCount].y = inBetween;
+				file->font->points[file->font->pointCount + glyphPointCount].y = inBetween;
 				++glyphPointCount;
 				++contourPointCount;
 			}
 
-			pFile->pFont->points[pFile->pFont->pointCount + glyphPointCount].y = y;
+			file->font->points[file->font->pointCount + glyphPointCount].y = y;
 			++glyphPointCount;
 			++contourPointCount;
 
 			lastY = y;
 		}
 
-		if(FR_BIT(pFile->flags[lastPoint], 0) == FR_BIT(pFile->flags[firstPoint], 0))
+		if(FR_BIT(file->flags[lastPoint], 0) == FR_BIT(file->flags[firstPoint], 0))
 		{
-			pFile->pFont->points[pFile->pFont->pointCount + glyphPointCount].y = (pFile->pFont->points[pFile->pFont->pointCount + lastOffset].y + lastY) / 2;
+			file->font->points[file->font->pointCount + glyphPointCount].y = (file->font->points[file->font->pointCount + lastOffset].y + lastY) / 2;
 			++glyphPointCount;
 			++contourPointCount;
 		}
@@ -345,29 +327,29 @@ static FrResult frParseSimpleGlyph(FrFontFile* pFile, uint16_t contourCount)
 		firstPoint = lastPoint + 1;
 		lastOffset = glyphPointCount;
 
-		pFile->pFont->contourInfos[contourInfoOffset + contourIndex] = contourPointCount;
+		file->font->contourInfos[contourInfoOffset + contourIndex] = contourPointCount;
 		contourPointCount = 0;
 	}
 
-	pFile->pFont->pointCount += glyphPointCount;
+	file->font->pointCount += glyphPointCount;
 
 	return FR_SUCCESS;
 }
 
-static FrResult frParseGlyph(FrFontFile* pFile);
+static FrResult frParseGlyph(FrFontFile* file);
 
-static FrResult frParseCompositeGlyph(FrFontFile* pFile)
+static FrResult frParseCompositeGlyph(FrFontFile* const file)
 {
 	uint16_t flags;
 	do
 	{
-		if(frReadUint16(&pFile->reader, &flags) != FR_SUCCESS)
+		if(frReadUint16(&file->reader, &flags) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
 		uint16_t glyphIndex;
-		if(frReadUint16(&pFile->reader, &glyphIndex) != FR_SUCCESS)
+		if(frReadUint16(&file->reader, &glyphIndex) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
@@ -378,11 +360,11 @@ static FrResult frParseCompositeGlyph(FrFontFile* pFile)
 			if(FR_BIT(flags, 0))
 			{
 				int16_t arg1, arg2;
-				if(frReadInt16(&pFile->reader, &arg1) != FR_SUCCESS)
+				if(frReadInt16(&file->reader, &arg1) != FR_SUCCESS)
 				{
 					return FR_ERROR_CORRUPTED_FILE;
 				}
-				if(frReadInt16(&pFile->reader, &arg2) != FR_SUCCESS)
+				if(frReadInt16(&file->reader, &arg2) != FR_SUCCESS)
 				{
 					return FR_ERROR_CORRUPTED_FILE;
 				}
@@ -392,11 +374,11 @@ static FrResult frParseCompositeGlyph(FrFontFile* pFile)
 			else
 			{
 				int8_t arg1, arg2;
-				if(frReadInt8(&pFile->reader, &arg1) != FR_SUCCESS)
+				if(frReadInt8(&file->reader, &arg1) != FR_SUCCESS)
 				{
 					return FR_ERROR_CORRUPTED_FILE;
 				}
-				if(frReadInt8(&pFile->reader, &arg2) != FR_SUCCESS)
+				if(frReadInt8(&file->reader, &arg2) != FR_SUCCESS)
 				{
 					return FR_ERROR_CORRUPTED_FILE;
 				}
@@ -414,7 +396,7 @@ static FrResult frParseCompositeGlyph(FrFontFile* pFile)
 		float a, b, c, d;
 		if(FR_BIT(flags, 3))
 		{
-			if(frReadF2d14(&pFile->reader, &a) != FR_SUCCESS)
+			if(frReadF2d14(&file->reader, &a) != FR_SUCCESS)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
@@ -424,11 +406,11 @@ static FrResult frParseCompositeGlyph(FrFontFile* pFile)
 		}
 		else if(FR_BIT(flags, 6))
 		{
-			if(frReadF2d14(&pFile->reader, &a) != FR_SUCCESS)
+			if(frReadF2d14(&file->reader, &a) != FR_SUCCESS)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
-			if(frReadF2d14(&pFile->reader, &d) != FR_SUCCESS)
+			if(frReadF2d14(&file->reader, &d) != FR_SUCCESS)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
@@ -437,19 +419,19 @@ static FrResult frParseCompositeGlyph(FrFontFile* pFile)
 		}
 		else if(FR_BIT(flags, 7))
 		{
-			if(frReadF2d14(&pFile->reader, &a) != FR_SUCCESS)
+			if(frReadF2d14(&file->reader, &a) != FR_SUCCESS)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
-			if(frReadF2d14(&pFile->reader, &b) != FR_SUCCESS)
+			if(frReadF2d14(&file->reader, &b) != FR_SUCCESS)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
-			if(frReadF2d14(&pFile->reader, &c) != FR_SUCCESS)
+			if(frReadF2d14(&file->reader, &c) != FR_SUCCESS)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
-			if(frReadF2d14(&pFile->reader, &d) != FR_SUCCESS)
+			if(frReadF2d14(&file->reader, &d) != FR_SUCCESS)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
@@ -472,58 +454,58 @@ static FrResult frParseCompositeGlyph(FrFontFile* pFile)
 		const float m = (1 + (fabsf(absA - absC) <= 33 / 65536.f)) * m0;
 		const float n = (1 + (fabsf(absB - absD) <= 33 / 65536.f)) * n0;
 
-		const long currentOffset = ftell(pFile->reader.file);
-		const uint32_t startPointCount = pFile->pFont->pointCount;
-		pFile->currentChild = glyphIndex;
-		if(frMoveTo(&pFile->reader, pFile->glyfOffset + pFile->offsets[glyphIndex]) != FR_SUCCESS)
+		const long currentOffset = ftell(file->reader.file);
+		const uint32_t startPointCount = file->font->pointCount;
+		file->currentChild = glyphIndex;
+		if(frMoveTo(&file->reader, file->glyfOffset + file->offsets[glyphIndex]) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
-		if(frParseGlyph(pFile) != FR_SUCCESS)
+		if(frParseGlyph(file) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
-		if(frMoveTo(&pFile->reader, currentOffset) != FR_SUCCESS)
+		if(frMoveTo(&file->reader, currentOffset) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
-		const uint32_t endPointCount = pFile->pFont->pointCount;
+		const uint32_t endPointCount = file->font->pointCount;
 
 		for(uint32_t i = startPointCount; i < endPointCount; ++i)
 		{
-			const float x = pFile->pFont->points[i].x * (pFile->pFont->glyphPositions[glyphIndex].xMax - pFile->pFont->glyphPositions[glyphIndex].xMin) + pFile->pFont->glyphPositions[glyphIndex].xMin;
-			const float y = pFile->pFont->points[i].y * (pFile->pFont->glyphPositions[glyphIndex].yMax - pFile->pFont->glyphPositions[glyphIndex].yMin) + pFile->pFont->glyphPositions[glyphIndex].yMin;
+			const float x = file->font->points[i].x * (file->font->glyphPositions[glyphIndex].xMax - file->font->glyphPositions[glyphIndex].xMin) + file->font->glyphPositions[glyphIndex].xMin;
+			const float y = file->font->points[i].y * (file->font->glyphPositions[glyphIndex].yMax - file->font->glyphPositions[glyphIndex].yMin) + file->font->glyphPositions[glyphIndex].yMin;
 
-			pFile->pFont->points[i].x = (m * (a / m * x + c / m * y + e) - pFile->pFont->glyphPositions[pFile->currentGlyph].xMin) / (pFile->pFont->glyphPositions[pFile->currentGlyph].xMax - pFile->pFont->glyphPositions[pFile->currentGlyph].xMin);
-			pFile->pFont->points[i].y = (n * (b / n * x + d / n * y + f) - pFile->pFont->glyphPositions[pFile->currentGlyph].yMin) / (pFile->pFont->glyphPositions[pFile->currentGlyph].yMax - pFile->pFont->glyphPositions[pFile->currentGlyph].yMin);
+			file->font->points[i].x = (m * (a / m * x + c / m * y + e) - file->font->glyphPositions[file->currentGlyph].xMin) / (file->font->glyphPositions[file->currentGlyph].xMax - file->font->glyphPositions[file->currentGlyph].xMin);
+			file->font->points[i].y = (n * (b / n * x + d / n * y + f) - file->font->glyphPositions[file->currentGlyph].yMin) / (file->font->glyphPositions[file->currentGlyph].yMax - file->font->glyphPositions[file->currentGlyph].yMin);
 		}
 	} while(FR_BIT(flags, 5));
 
 	return FR_SUCCESS;
 }
 
-static FrResult frParseGlyph(FrFontFile* pFile)
+static FrResult frParseGlyph(FrFontFile* const file)
 {
 	int16_t contourCount;
-	if(frReadInt16(&pFile->reader, &contourCount) != FR_SUCCESS)
+	if(frReadInt16(&file->reader, &contourCount) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
-	const uint16_t id = pFile->parent ? pFile->currentGlyph : pFile->currentChild;
-	if(frReadInt16(&pFile->reader, &pFile->pFont->glyphPositions[id].xMin) != FR_SUCCESS)
+	const uint16_t id = file->parent ? file->currentGlyph : file->currentChild;
+	if(frReadInt16(&file->reader, &file->font->glyphPositions[id].xMin) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
-	if(frReadInt16(&pFile->reader, &pFile->pFont->glyphPositions[id].yMin) != FR_SUCCESS)
+	if(frReadInt16(&file->reader, &file->font->glyphPositions[id].yMin) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
-	if(frReadInt16(&pFile->reader, &pFile->pFont->glyphPositions[id].xMax) != FR_SUCCESS)
+	if(frReadInt16(&file->reader, &file->font->glyphPositions[id].xMax) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
-	if(frReadInt16(&pFile->reader, &pFile->pFont->glyphPositions[id].yMax) != FR_SUCCESS)
+	if(frReadInt16(&file->reader, &file->font->glyphPositions[id].yMax) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
@@ -531,53 +513,57 @@ static FrResult frParseGlyph(FrFontFile* pFile)
 	// Composite glyph
 	if(contourCount < 0)
 	{
-		if((uint32_t)pFile->pFont->contourInfoCount + 1 >= pFile->contourInfoCapacity)
+		if((uint32_t)file->font->contourInfoCount + 1 >= file->contourInfoCapacity)
 		{
-			pFile->contourInfoCapacity *= 2;
-			if(frResize(&pFile->pFont->contourInfos, pFile->contourInfoCapacity * sizeof(pFile->pFont->contourInfos[0])) != FR_SUCCESS)
+			file->contourInfoCapacity *= 2;
+			uint32_t* const newContourInfos = realloc(file->font->contourInfos, file->contourInfoCapacity * sizeof(file->font->contourInfos[0]));
+			if(!newContourInfos)
 			{
 				return FR_ERROR_OUT_OF_HOST_MEMORY;
 			}
+			file->font->contourInfos = newContourInfos;
 		}
 
-		const uint16_t contourCountIndex = pFile->pFont->contourInfoCount;
-		bool parent = pFile->parent;
-		pFile->parent = false;
+		const uint16_t contourCountIndex = file->font->contourInfoCount;
+		bool parent = file->parent;
+		file->parent = false;
 
 		if(parent)
 		{
-			++pFile->pFont->contourInfoCount;
+			++file->font->contourInfoCount;
 		}
 
-		if(frParseCompositeGlyph(pFile) != FR_SUCCESS)
+		if(frParseCompositeGlyph(file) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
 		if(parent)
 		{
-			pFile->pFont->contourInfos[contourCountIndex] = pFile->pFont->contourInfoCount - contourCountIndex - 1;
+			file->font->contourInfos[contourCountIndex] = file->font->contourInfoCount - contourCountIndex - 1;
 		}
 
 		return FR_SUCCESS;
 	}
 
 	// Simple glyph
-	if((uint32_t)pFile->pFont->contourInfoCount + contourCount >= pFile->contourInfoCapacity)
+	if((uint32_t)file->font->contourInfoCount + contourCount >= file->contourInfoCapacity)
 	{
-		pFile->contourInfoCapacity *= 2;
-		if(frResize(&pFile->pFont->contourInfos, pFile->contourInfoCapacity * sizeof(pFile->pFont->contourInfos[0])) != FR_SUCCESS)
+		file->contourInfoCapacity *= 2;
+		uint32_t* const newContourInfos = realloc(file->font->contourInfos, file->contourInfoCapacity * sizeof(file->font->contourInfos[0]));
+		if(!newContourInfos)
 		{
 			return FR_ERROR_OUT_OF_HOST_MEMORY;
 		}
+		file->font->contourInfos = newContourInfos;
 	}
-	if(pFile->parent)
+	if(file->parent)
 	{
-		pFile->pFont->contourInfos[pFile->pFont->contourInfoCount] = contourCount;
-		++pFile->pFont->contourInfoCount;
+		file->font->contourInfos[file->font->contourInfoCount] = contourCount;
+		++file->font->contourInfoCount;
 	}
 
-	if(frParseSimpleGlyph(pFile, contourCount) != FR_SUCCESS)
+	if(frParseSimpleGlyph(file, contourCount) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
@@ -585,115 +571,115 @@ static FrResult frParseGlyph(FrFontFile* pFile)
 	return FR_SUCCESS;
 }
 
-static FrResult frParseGlyphs(FrFontFile* pFile)
+static FrResult frParseGlyphs(FrFontFile* const file)
 {
-	pFile->flags = NULL;
-	pFile->flagsCapacity = 0;
+	file->flags = nullptr;
+	file->flagsCapacity = 0;
 
-	pFile->pFont->glyphPositions = malloc(pFile->pFont->glyphCount * sizeof(pFile->pFont->glyphPositions[0]));
-	if(!pFile->pFont->glyphPositions)
+	file->font->glyphPositions = malloc(file->font->glyphCount * sizeof(file->font->glyphPositions[0]));
+	if(!file->font->glyphPositions)
 	{
 		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
 
-	pFile->pFont->glyphOffsets = malloc(pFile->pFont->glyphCount * 2 * sizeof(pFile->pFont->glyphOffsets[0]));
-	if(!pFile->pFont->glyphOffsets)
+	file->font->glyphOffsets = malloc(file->font->glyphCount * 2 * sizeof(file->font->glyphOffsets[0]));
+	if(!file->font->glyphOffsets)
 	{
-		free(pFile->pFont->glyphPositions);
+		free(file->font->glyphPositions);
 		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
 
 	// hhea
-	if(frMoveTo(&pFile->reader, pFile->hheaOffset + 34) != FR_SUCCESS)
+	if(frMoveTo(&file->reader, file->hheaOffset + 34) != FR_SUCCESS)
 	{
-		free(pFile->pFont->glyphPositions);
-		free(pFile->pFont->glyphOffsets);
+		free(file->font->glyphPositions);
+		free(file->font->glyphOffsets);
 		return FR_ERROR_CORRUPTED_FILE;
 	}
-	if(frReadUint16(&pFile->reader, &pFile->advanceWidthCount) != FR_SUCCESS)
+	if(frReadUint16(&file->reader, &file->advanceWidthCount) != FR_SUCCESS)
 	{
-		free(pFile->pFont->glyphPositions);
-		free(pFile->pFont->glyphOffsets);
+		free(file->font->glyphPositions);
+		free(file->font->glyphOffsets);
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
 	// hmtx
-	if(frMoveTo(&pFile->reader, pFile->hmtxOffset) != FR_SUCCESS)
+	if(frMoveTo(&file->reader, file->hmtxOffset) != FR_SUCCESS)
 	{
-		free(pFile->pFont->glyphPositions);
-		free(pFile->pFont->glyphOffsets);
+		free(file->font->glyphPositions);
+		free(file->font->glyphOffsets);
 		return FR_ERROR_CORRUPTED_FILE;
 	}
-	for(uint32_t i = 0; i < pFile->pFont->glyphCount; ++i)
+	for(uint32_t i = 0; i < file->font->glyphCount; ++i)
 	{
-		if(i < pFile->advanceWidthCount)
+		if(i < file->advanceWidthCount)
 		{
-			if(frReadUint16(&pFile->reader, &pFile->pFont->glyphPositions[i].advanceWidth) != FR_SUCCESS)
+			if(frReadUint16(&file->reader, &file->font->glyphPositions[i].advanceWidth) != FR_SUCCESS)
 			{
-				free(pFile->pFont->glyphPositions);
-				free(pFile->pFont->glyphOffsets);
+				free(file->font->glyphPositions);
+				free(file->font->glyphOffsets);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 		}
 		else
 		{
-			pFile->pFont->glyphPositions[i].advanceWidth = pFile->pFont->glyphPositions[pFile->advanceWidthCount - 1].advanceWidth;
+			file->font->glyphPositions[i].advanceWidth = file->font->glyphPositions[file->advanceWidthCount - 1].advanceWidth;
 		}
-		if(frReadInt16(&pFile->reader, &pFile->pFont->glyphPositions[i].leftSideBearing) != FR_SUCCESS)
+		if(frReadInt16(&file->reader, &file->font->glyphPositions[i].leftSideBearing) != FR_SUCCESS)
 		{
-			free(pFile->pFont->glyphPositions);
-			free(pFile->pFont->glyphOffsets);
+			free(file->font->glyphPositions);
+			free(file->font->glyphOffsets);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 	}
 
-	for(uint16_t i = 0; i < pFile->pFont->glyphCount; ++i)
+	for(uint16_t i = 0; i < file->font->glyphCount; ++i)
 	{
-		if(pFile->offsets[i] == pFile->offsets[(uint32_t)i + 1])
+		if(file->offsets[i] == file->offsets[(uint32_t)i + 1])
 		{
-			pFile->pFont->glyphPositions[i].xMin = 0;
-			pFile->pFont->glyphPositions[i].yMin = 0;
-			pFile->pFont->glyphPositions[i].xMax = 0;
-			pFile->pFont->glyphPositions[i].yMax = 0;
+			file->font->glyphPositions[i].xMin = 0;
+			file->font->glyphPositions[i].yMin = 0;
+			file->font->glyphPositions[i].xMax = 0;
+			file->font->glyphPositions[i].yMax = 0;
 
 			continue;
 		}
 
-		pFile->currentGlyph = i;
-		pFile->parent = true;
+		file->currentGlyph = i;
+		file->parent = true;
 
-		pFile->pFont->glyphOffsets[2 * (uint32_t)i] = pFile->pFont->contourInfoCount;
-		pFile->pFont->glyphOffsets[2 * (uint32_t)i + 1] = pFile->pFont->pointCount;
+		file->font->glyphOffsets[2 * (uint32_t)i] = file->font->contourInfoCount;
+		file->font->glyphOffsets[2 * (uint32_t)i + 1] = file->font->pointCount;
 
-		if(frMoveTo(&pFile->reader, pFile->glyfOffset + pFile->offsets[i]) != FR_SUCCESS)
+		if(frMoveTo(&file->reader, file->glyfOffset + file->offsets[i]) != FR_SUCCESS)
 		{
-			free(pFile->pFont->glyphPositions);
-			free(pFile->flags);
+			free(file->font->glyphPositions);
+			free(file->flags);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
-		if(frParseGlyph(pFile) != FR_SUCCESS)
+		if(frParseGlyph(file) != FR_SUCCESS)
 		{
-			free(pFile->pFont->glyphPositions);
-			free(pFile->flags);
+			free(file->font->glyphPositions);
+			free(file->flags);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 	}
 
-	free(pFile->flags);
+	free(file->flags);
 
 	return FR_SUCCESS;
 }
 
-static FrResult frParseMappings(FrFontFile* pFile)
+static FrResult frParseMappings(FrFontFile* const file)
 {
-	if(frMoveTo(&pFile->reader, pFile->cmapOffset + 2) != FR_SUCCESS)
+	if(frMoveTo(&file->reader, file->cmapOffset + 2) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
 	uint16_t numSubtables;
-	if(frReadUint16(&pFile->reader, &numSubtables) != FR_SUCCESS)
+	if(frReadUint16(&file->reader, &numSubtables) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
@@ -704,11 +690,11 @@ static FrResult frParseMappings(FrFontFile* pFile)
 	for(uint16_t i = 0; i < numSubtables; ++i)
 	{
 		uint16_t currentPlatformId, currentEncodingId;
-		if(frReadUint16(&pFile->reader, &currentPlatformId) != FR_SUCCESS)
+		if(frReadUint16(&file->reader, &currentPlatformId) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
-		if(frReadUint16(&pFile->reader, &currentEncodingId) != FR_SUCCESS)
+		if(frReadUint16(&file->reader, &currentEncodingId) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
@@ -717,7 +703,7 @@ static FrResult frParseMappings(FrFontFile* pFile)
 		{
 			platformId = currentPlatformId;
 			encodingId = currentEncodingId;
-			if(frReadUint32(&pFile->reader, &offset) != FR_SUCCESS)
+			if(frReadUint32(&file->reader, &offset) != FR_SUCCESS)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
@@ -738,19 +724,19 @@ static FrResult frParseMappings(FrFontFile* pFile)
 		if(platformId == 0 && currentEncodingId > encodingId && currentEncodingId <= 4)
 		{
 			encodingId = currentEncodingId;
-			if(frReadUint32(&pFile->reader, &offset) != FR_SUCCESS)
+			if(frReadUint32(&file->reader, &offset) != FR_SUCCESS)
 			{
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 		}
 	}
-	if(frMoveTo(&pFile->reader, pFile->cmapOffset + offset) != FR_SUCCESS)
+	if(frMoveTo(&file->reader, file->cmapOffset + offset) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
 	uint16_t format;
-	if(frReadUint16(&pFile->reader, &format) != FR_SUCCESS)
+	if(frReadUint16(&file->reader, &format) != FR_SUCCESS)
 	{
 		return FR_ERROR_CORRUPTED_FILE;
 	}
@@ -758,12 +744,12 @@ static FrResult frParseMappings(FrFontFile* pFile)
 	if(format == FR_CMAP_FORMAT_4)
 	{
 		uint16_t length;
-		if(frReadUint16(&pFile->reader, &length) != FR_SUCCESS)
+		if(frReadUint16(&file->reader, &length) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
-		pFile->pFont->cmapFormat = FR_CMAP_FORMAT_4;
+		file->font->cmapFormat = FR_CMAP_FORMAT_4;
 		if(length % sizeof(length) != 0 || length <= 14)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
@@ -775,20 +761,20 @@ static FrResult frParseMappings(FrFontFile* pFile)
 			return FR_ERROR_OUT_OF_HOST_MEMORY;
 		}
 
-		if(frSkipBytes(&pFile->reader, 2) != FR_SUCCESS)
+		if(frSkipBytes(&file->reader, 2) != FR_SUCCESS)
 		{
 			free(cmapData);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
-		if(frReadUint16(&pFile->reader, &cmapData[0]) != FR_SUCCESS)
+		if(frReadUint16(&file->reader, &cmapData[0]) != FR_SUCCESS)
 		{
 			free(cmapData);
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 		cmapData[0] /= 2;
 
-		if(frSkipBytes(&pFile->reader, 6) != FR_SUCCESS)
+		if(frSkipBytes(&file->reader, 6) != FR_SUCCESS)
 		{
 			free(cmapData);
 			return FR_ERROR_CORRUPTED_FILE;
@@ -796,14 +782,14 @@ static FrResult frParseMappings(FrFontFile* pFile)
 
 		for(uint16_t j = 0; j < cmapData[0]; ++j)
 		{
-			if(frReadUint16(&pFile->reader, &cmapData[j + 1]) != FR_SUCCESS)
+			if(frReadUint16(&file->reader, &cmapData[j + 1]) != FR_SUCCESS)
 			{
 				free(cmapData);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 		}
 
-		if(frSkipBytes(&pFile->reader, 2) != FR_SUCCESS)
+		if(frSkipBytes(&file->reader, 2) != FR_SUCCESS)
 		{
 			free(cmapData);
 			return FR_ERROR_CORRUPTED_FILE;
@@ -811,7 +797,7 @@ static FrResult frParseMappings(FrFontFile* pFile)
 
 		for(uint16_t j = 0; j < cmapData[0]; ++j)
 		{
-			if(frReadUint16(&pFile->reader, &cmapData[j + cmapData[0] + 1]) != FR_SUCCESS)
+			if(frReadUint16(&file->reader, &cmapData[j + cmapData[0] + 1]) != FR_SUCCESS)
 			{
 				free(cmapData);
 				return FR_ERROR_CORRUPTED_FILE;
@@ -820,7 +806,7 @@ static FrResult frParseMappings(FrFontFile* pFile)
 
 		for(uint16_t j = 0; j < cmapData[0]; ++j)
 		{
-			if(frReadUint16(&pFile->reader, &cmapData[j + 2 * cmapData[0] + 1]) != FR_SUCCESS)
+			if(frReadUint16(&file->reader, &cmapData[j + 2 * cmapData[0] + 1]) != FR_SUCCESS)
 			{
 				free(cmapData);
 				return FR_ERROR_CORRUPTED_FILE;
@@ -829,7 +815,7 @@ static FrResult frParseMappings(FrFontFile* pFile)
 
 		for(uint16_t j = 0; j < cmapData[0]; ++j)
 		{
-			if(frReadUint16(&pFile->reader, &cmapData[j + 3 * cmapData[0] + 1]) != FR_SUCCESS)
+			if(frReadUint16(&file->reader, &cmapData[j + 3 * cmapData[0] + 1]) != FR_SUCCESS)
 			{
 				free(cmapData);
 				return FR_ERROR_CORRUPTED_FILE;
@@ -840,29 +826,29 @@ static FrResult frParseMappings(FrFontFile* pFile)
 		cmapData[4 * cmapData[0] + 1] = glyphIndexCount;
 		for(uint16_t j = 0; j < glyphIndexCount; ++j)
 		{
-			if(frReadUint16(&pFile->reader, &cmapData[j + 4 * cmapData[0] + 2]) != FR_SUCCESS)
+			if(frReadUint16(&file->reader, &cmapData[j + 4 * cmapData[0] + 2]) != FR_SUCCESS)
 			{
 				free(cmapData);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 		}
 
-		pFile->pFont->cmapData = cmapData;
+		file->font->cmapData = cmapData;
 
 		return FR_SUCCESS;
 	}
 
 	if(format == FR_CMAP_FORMAT_12)
 	{
-		pFile->pFont->cmapFormat = FR_CMAP_FORMAT_12;
+		file->font->cmapFormat = FR_CMAP_FORMAT_12;
 
-		if(frSkipBytes(&pFile->reader, 10) != FR_SUCCESS)
+		if(frSkipBytes(&file->reader, 10) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
 
 		uint32_t numGroups;
-		if(frReadUint32(&pFile->reader, &numGroups) != FR_SUCCESS)
+		if(frReadUint32(&file->reader, &numGroups) != FR_SUCCESS)
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
@@ -876,26 +862,26 @@ static FrResult frParseMappings(FrFontFile* pFile)
 
 		for(uint32_t i = 0; i < numGroups; ++i)
 		{
-			if(frReadUint32(&pFile->reader, &cmapData[1 + i]) != FR_SUCCESS)
+			if(frReadUint32(&file->reader, &cmapData[1 + i]) != FR_SUCCESS)
 			{
 				free(cmapData);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 
-			if(frReadUint32(&pFile->reader, &cmapData[1 + numGroups + i]) != FR_SUCCESS)
+			if(frReadUint32(&file->reader, &cmapData[1 + numGroups + i]) != FR_SUCCESS)
 			{
 				free(cmapData);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 
-			if(frReadUint32(&pFile->reader, &cmapData[1 + 2 * numGroups + i]) != FR_SUCCESS)
+			if(frReadUint32(&file->reader, &cmapData[1 + 2 * numGroups + i]) != FR_SUCCESS)
 			{
 				free(cmapData);
 				return FR_ERROR_CORRUPTED_FILE;
 			}
 		}
 
-		pFile->pFont->cmapData = cmapData;
+		file->font->cmapData = cmapData;
 
 		return FR_SUCCESS;
 	}
@@ -903,21 +889,16 @@ static FrResult frParseMappings(FrFontFile* pFile)
 	return FR_ERROR_CORRUPTED_FILE;
 }
 
-FrResult frLoadFont(const char* path, FrFont* pFont)
+FrResult frLoadFont(const char* const path, FrFont* const font)
 {
-	if(!path || !pFont)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	*pFont = (FrFont){0};
+	*font = (FrFont){0};
 	FrFontFile fontFile = {0};
 	fontFile.reader.file = fopen(path, "rb");
 	if(!fontFile.reader.file)
 	{
 		return FR_ERROR_FILE_NOT_FOUND;
 	}
-	fontFile.pFont = pFont;
+	fontFile.font = font;
 
 	if(frParseTableDirectory(&fontFile) != FR_SUCCESS)
 	{
@@ -958,24 +939,24 @@ FrResult frLoadFont(const char* path, FrFont* pFont)
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
-	if(frReadUint16(&fontFile.reader, &fontFile.pFont->glyphCount) != FR_SUCCESS)
+	if(frReadUint16(&fontFile.reader, &fontFile.font->glyphCount) != FR_SUCCESS)
 	{
 		fclose(fontFile.reader.file);
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
-	fontFile.contourInfoCapacity = fontFile.pFont->glyphCount * UINT32_C(4);
-	fontFile.pFont->contourInfos = malloc(fontFile.contourInfoCapacity * sizeof(fontFile.pFont->contourInfos[0]));
-	if(!fontFile.pFont->contourInfos)
+	fontFile.contourInfoCapacity = fontFile.font->glyphCount * UINT32_C(4);
+	fontFile.font->contourInfos = malloc(fontFile.contourInfoCapacity * sizeof(fontFile.font->contourInfos[0]));
+	if(!fontFile.font->contourInfos)
 	{
 		fclose(fontFile.reader.file);
 		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
 
-	fontFile.pFont->points = malloc(fontFile.pFont->glyphCount * 100 * sizeof(fontFile.pFont->points[0]));
-	if(!fontFile.pFont->points)
+	fontFile.font->points = malloc(fontFile.font->glyphCount * 100 * sizeof(fontFile.font->points[0]));
+	if(!fontFile.font->points)
 	{
-		free(fontFile.pFont->contourInfos);
+		free(fontFile.font->contourInfos);
 		fclose(fontFile.reader.file);
 		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
@@ -987,13 +968,13 @@ FrResult frLoadFont(const char* path, FrFont* pFont)
 		return FR_ERROR_CORRUPTED_FILE;
 	}
 
-	fontFile.offsets = malloc((fontFile.pFont->glyphCount + 1) * sizeof(fontFile.offsets[0]));
+	fontFile.offsets = malloc((fontFile.font->glyphCount + 1) * sizeof(fontFile.offsets[0]));
 	if(!fontFile.offsets)
 	{
 		fclose(fontFile.reader.file);
 		return FR_ERROR_OUT_OF_HOST_MEMORY;
 	}
-	for(uint16_t i = 0; i <= fontFile.pFont->glyphCount; ++i)
+	for(uint16_t i = 0; i <= fontFile.font->glyphCount; ++i)
 	{
 		if(indexToLocFormat == 0)
 		{
@@ -1020,8 +1001,8 @@ FrResult frLoadFont(const char* path, FrFont* pFont)
 	// glyf
 	if(frParseGlyphs(&fontFile) != FR_SUCCESS)
 	{
-		free(fontFile.pFont->points);
-		free(fontFile.pFont->contourInfos);
+		free(fontFile.font->points);
+		free(fontFile.font->contourInfos);
 		free(fontFile.offsets);
 		fclose(fontFile.reader.file);
 		return FR_ERROR_CORRUPTED_FILE;
@@ -1030,11 +1011,11 @@ FrResult frLoadFont(const char* path, FrFont* pFont)
 	// cmap
 	if(frParseMappings(&fontFile) != FR_SUCCESS)
 	{
-		free(fontFile.pFont->points);
-		free(fontFile.pFont->contourInfos);
+		free(fontFile.font->points);
+		free(fontFile.font->contourInfos);
 
-		free(fontFile.pFont->glyphPositions);
-		free(fontFile.pFont->glyphOffsets);
+		free(fontFile.font->glyphPositions);
+		free(fontFile.font->glyphOffsets);
 
 		free(fontFile.offsets);
 		fclose(fontFile.reader.file);
@@ -1048,23 +1029,18 @@ FrResult frLoadFont(const char* path, FrFont* pFont)
 	return FR_SUCCESS;
 }
 
-FrResult frGetGlyphId(const FrFont* pFont, uint32_t characterCode, uint32_t* pGlyphId)
+FrResult frGetGlyphId(const FrFont* const font, const uint32_t characterCode, uint32_t* const glyphId)
 {
-	if(!pFont || !pGlyphId)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	if(pFont->cmapFormat == FR_CMAP_FORMAT_4)
+	if(font->cmapFormat == FR_CMAP_FORMAT_4)
 	{
 		if(characterCode > UINT16_MAX)
 		{
-			*pGlyphId = 0;
+			*glyphId = 0;
 			return EXIT_SUCCESS;
 		}
 
-		const uint16_t segCount = *(uint16_t*)pFont->cmapData;
-		const uint16_t* const endCodes = (uint16_t*)pFont->cmapData + 1;
+		const uint16_t segCount = *(uint16_t*)font->cmapData;
+		const uint16_t* const endCodes = (uint16_t*)font->cmapData + 1;
 		const uint16_t* const startCodes = endCodes + segCount;
 		const uint16_t* const idDeltas = startCodes + segCount;
 		const uint16_t* const idRangeOffsets = idDeltas + segCount;
@@ -1076,19 +1052,19 @@ FrResult frGetGlyphId(const FrFont* pFont, uint32_t characterCode, uint32_t* pGl
 		for(i = 0; i < segCount && character > endCodes[i]; ++i);
 		if(i == segCount)
 		{
-			*pGlyphId = 0;
+			*glyphId = 0;
 			return FR_SUCCESS;
 		}
 
 		if(character < startCodes[i])
 		{
-			*pGlyphId = 0;
+			*glyphId = 0;
 			return FR_SUCCESS;
 		}
 
 		if(idRangeOffsets[i] == 0)
 		{
-			*pGlyphId = (character + idDeltas[i]) % (UINT16_MAX + UINT32_C(1));
+			*glyphId = (character + idDeltas[i]) % (UINT16_MAX + UINT32_C(1));
 			return FR_SUCCESS;
 		}
 
@@ -1097,20 +1073,20 @@ FrResult frGetGlyphId(const FrFont* pFont, uint32_t characterCode, uint32_t* pGl
 		{
 			return FR_ERROR_CORRUPTED_FILE;
 		}
-		*pGlyphId = *(idRangeOffsets + i + offset + 1);
-		if(*pGlyphId == 0)
+		*glyphId = *(idRangeOffsets + i + offset + 1);
+		if(*glyphId == 0)
 		{
 			return FR_SUCCESS;
 		}
-		*pGlyphId = (*pGlyphId + idDeltas[i]) % (UINT16_MAX + UINT32_C(1));
+		*glyphId = (*glyphId + idDeltas[i]) % (UINT16_MAX + UINT32_C(1));
 
 		return FR_SUCCESS;
 	}
 
-	if(pFont->cmapFormat == FR_CMAP_FORMAT_12)
+	if(font->cmapFormat == FR_CMAP_FORMAT_12)
 	{
-		const uint32_t numGroups = *(uint32_t*)pFont->cmapData;
-		const uint32_t* const startCharCodes = (uint32_t*)pFont->cmapData + 1;
+		const uint32_t numGroups = *(uint32_t*)font->cmapData;
+		const uint32_t* const startCharCodes = (uint32_t*)font->cmapData + 1;
 		const uint32_t* const endCharCodes = startCharCodes + numGroups;
 		const uint32_t* const startGlyphCodes = endCharCodes + numGroups;
 
@@ -1118,7 +1094,7 @@ FrResult frGetGlyphId(const FrFont* pFont, uint32_t characterCode, uint32_t* pGl
 		{
 			if(characterCode >= startCharCodes[i] && characterCode <= endCharCodes[i])
 			{
-				*pGlyphId = startGlyphCodes[i] + characterCode - startCharCodes[i];
+				*glyphId = startGlyphCodes[i] + characterCode - startCharCodes[i];
 				return FR_SUCCESS;
 			}
 		}
@@ -1129,116 +1105,102 @@ FrResult frGetGlyphId(const FrFont* pFont, uint32_t characterCode, uint32_t* pGl
 	return FR_ERROR_CORRUPTED_FILE;
 }
 
-FrResult frFreeFont(FrFont* pFont)
+void frFreeFont(FrFont* const font)
 {
-	if(!pFont)
-	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
+	free(font->points);
+	free(font->contourInfos);
 
-	free(pFont->points);
-	free(pFont->contourInfos);
+	free(font->glyphPositions);
+	free(font->glyphOffsets);
 
-	free(pFont->glyphPositions);
-	free(pFont->glyphOffsets);
-
-	free(pFont->cmapData);
-
-	return FR_SUCCESS;
+	free(font->cmapData);
 }
 
 #define FR_1BYTE  0x80
-#define FR_2BYTES 0xE0
-#define FR_3BYTES 0xF0
+#define FR_2BYTES 0xe0
+#define FR_3BYTES 0xf0
 
 #define FR_3BITS 0x07
-#define FR_4BITS 0x0F
-#define FR_5BITS 0x1F
-#define FR_6BITS 0x3F
-#define FR_7BITS 0x7F
+#define FR_4BITS 0x0f
+#define FR_5BITS 0x1f
+#define FR_6BITS 0x3f
+#define FR_7BITS 0x7f
 
-FrResult frNextCharacterCode(FrStringReader* pStringReader, uint32_t* pCharacterCode)
+FrResult frNextCharacterCode(FrStringReader* const stringReader, uint32_t* const characterCode)
 {
-	static_assert(CHAR_BIT == 8, "Only 8 bits chars are supported for now");
-
-	if(!pStringReader || !pStringReader->string || !pCharacterCode)
+	if(stringReader->string >= stringReader->end)
 	{
-		return FR_ERROR_INVALID_ARGUMENT;
-	}
-
-	if(pStringReader->string >= pStringReader->end)
-	{
-		*pCharacterCode = 0;
+		*characterCode = 0;
 		return FR_SUCCESS;
 	}
 
-	const uint8_t first = *pStringReader->string;
+	const uint8_t first = *stringReader->string;
 	if(first < FR_1BYTE)
 	{
-		*pCharacterCode = first & FR_7BITS;
-		++pStringReader->string;
+		*characterCode = first & FR_7BITS;
+		++stringReader->string;
 		return FR_SUCCESS;
 	}
 
-	if(pStringReader->string + 1 >= pStringReader->end)
+	if(stringReader->string + 1 >= stringReader->end)
 	{
 		return FR_ERROR_INVALID_ARGUMENT;
 	}
 
 	if(first < FR_2BYTES)
 	{
-		*pCharacterCode = first & FR_5BITS;
-		*pCharacterCode <<= 6;
-		++pStringReader->string;
+		*characterCode = first & FR_5BITS;
+		*characterCode <<= 6;
+		++stringReader->string;
 
-		*pCharacterCode |= *pStringReader->string & FR_6BITS;
-		++pStringReader->string;
+		*characterCode |= *stringReader->string & FR_6BITS;
+		++stringReader->string;
 
 		return FR_SUCCESS;
 	}
 
-	if(pStringReader->string + 2 >= pStringReader->end)
+	if(stringReader->string + 2 >= stringReader->end)
 	{
 		return FR_ERROR_INVALID_ARGUMENT;
 	}
 
 	if(first < FR_3BYTES)
 	{
-		*pCharacterCode = first & FR_4BITS;
-		*pCharacterCode <<= 6;
-		++pStringReader->string;
+		*characterCode = first & FR_4BITS;
+		*characterCode <<= 6;
+		++stringReader->string;
 
-		*pCharacterCode |= *pStringReader->string & FR_6BITS;
-		*pCharacterCode <<= 6;
-		++pStringReader->string;
+		*characterCode |= *stringReader->string & FR_6BITS;
+		*characterCode <<= 6;
+		++stringReader->string;
 
-		*pCharacterCode |= *pStringReader->string & FR_6BITS;
-		*pCharacterCode <<= 6;
-		++pStringReader->string;
+		*characterCode |= *stringReader->string & FR_6BITS;
+		*characterCode <<= 6;
+		++stringReader->string;
 
 		return FR_SUCCESS;
 	}
 
-	if(pStringReader->string + 3 >= pStringReader->end)
+	if(stringReader->string + 3 >= stringReader->end)
 	{
 		return FR_ERROR_INVALID_ARGUMENT;
 	}
 
-	*pCharacterCode = first & FR_3BITS;
-	*pCharacterCode <<= 6;
-	++pStringReader->string;
+	*characterCode = first & FR_3BITS;
+	*characterCode <<= 6;
+	++stringReader->string;
 
-	*pCharacterCode |= *pStringReader->string & FR_6BITS;
-	*pCharacterCode <<= 6;
-	++pStringReader->string;
+	*characterCode |= *stringReader->string & FR_6BITS;
+	*characterCode <<= 6;
+	++stringReader->string;
 
-	*pCharacterCode |= *pStringReader->string & FR_6BITS;
-	*pCharacterCode <<= 6;
-	++pStringReader->string;
+	*characterCode |= *stringReader->string & FR_6BITS;
+	*characterCode <<= 6;
+	++stringReader->string;
 
-	*pCharacterCode |= *pStringReader->string & FR_6BITS;
-	*pCharacterCode <<= 6;
-	++pStringReader->string;
+	*characterCode |= *stringReader->string & FR_6BITS;
+	*characterCode <<= 6;
+	++stringReader->string;
 
 	return FR_SUCCESS;
 }

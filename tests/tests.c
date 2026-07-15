@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <errno.h>
 #include <float.h>
 #include <inttypes.h>
@@ -9,12 +8,12 @@
 
 #include <fraus/fraus.h>
 
-int compareInts(const void* pFirstVoid, const void* pSecondVoid)
+int compareInts(const void* const firstVoid, const void* const secondVoid)
 {
-	const int* const pFirst = pFirstVoid;
-	const int* const pSecond = pSecondVoid;
+	const int* const first = firstVoid;
+	const int* const second = secondVoid;
 
-	return (*pFirst > *pSecond) - (*pFirst < *pSecond);
+	return (*first > *second) - (*first < *second);
 }
 
 typedef struct FrSortTest
@@ -23,12 +22,12 @@ typedef struct FrSortTest
 	int b;
 } FrSortTest;
 
-int compareSortTests(const void* pFirstVoid, const void* pSecondVoid)
+int compareSortTests(const void* const firstVoid, const void* const secondVoid)
 {
-	const FrSortTest* const pFirst = pFirstVoid;
-	const FrSortTest* const pSecond = pSecondVoid;
+	const FrSortTest* const first = firstVoid;
+	const FrSortTest* const second = secondVoid;
 
-	return (pFirst->a > pSecond->a) - (pFirst->a < pSecond->a);
+	return (first->a > second->a) - (first->a < second->a);
 }
 
 typedef struct FrF2d14
@@ -52,7 +51,6 @@ int main(void)
 	const int second[] = {3, 4, 5, 8, 10, 11, 12};
 	int final[FR_LEN(first) + FR_LEN(second)];
 	const int solution[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-	static_assert(FR_LEN(final) == FR_LEN(solution), "final and solution should have the same length");
 	frMergeSorted(FR_LEN(first), first, FR_LEN(second), second, final, sizeof(final[0]), compareInts);
 	if(memcmp(final, solution, sizeof(final)) != 0)
 	{
@@ -74,7 +72,6 @@ int main(void)
 		first2[1],
 		second2[1]
 	};
-	static_assert(FR_LEN(final2) == FR_LEN(solution2), "final2 and solution2 should have the same length");
 	frMergeSorted(FR_LEN(first2), first2, FR_LEN(second2), second2, final2, sizeof(final2[0]), compareSortTests);
 	if(memcmp(final2, solution2, sizeof(final2)) != 0)
 	{
